@@ -9,27 +9,83 @@ import (
 	"github.com/yuancore/go-zen/zen"
 )
 
+// ---------- ginContext ----------
+
+// ginContext wraps gin.Context to implement zen.Context.
+type ginContext struct {
+	c *gin.Context
+}
+
+func newContext(c *gin.Context) zen.Context {
+	return &ginContext{c: c}
+}
+
+func (g *ginContext) Param(key string) string                { return g.c.Param(key) }
+func (g *ginContext) Query(key string) string                { return g.c.Query(key) }
+func (g *ginContext) DefaultQuery(key, def string) string    { return g.c.DefaultQuery(key, def) }
+func (g *ginContext) Header(key string) string               { return g.c.GetHeader(key) }
+func (g *ginContext) SetHeader(key, value string)            { g.c.Header(key, value) }
+func (g *ginContext) BindJSON(v any) error                   { return g.c.ShouldBindJSON(v) }
+func (g *ginContext) BindQuery(v any) error                  { return g.c.ShouldBindQuery(v) }
+func (g *ginContext) ShouldBind(v any) error                 { return g.c.ShouldBind(v) }
+func (g *ginContext) JSON(code int, v any)                   { g.c.JSON(code, v) }
+func (g *ginContext) String(code int, f string, vals ...any) { g.c.String(code, f, vals...) }
+func (g *ginContext) Data(code int, ct string, data []byte)  { g.c.Data(code, ct, data) }
+func (g *ginContext) Status(code int)                        { g.c.Status(code) }
+func (g *ginContext) Redirect(code int, location string)     { g.c.Redirect(code, location) }
+func (g *ginContext) Request() *http.Request                 { return g.c.Request }
+func (g *ginContext) ResponseWriter() http.ResponseWriter    { return g.c.Writer }
+func (g *ginContext) ClientIP() string                       { return g.c.ClientIP() }
+func (g *ginContext) FullPath() string                       { return g.c.FullPath() }
+func (g *ginContext) Set(key string, value any)              { g.c.Set(key, value) }
+func (g *ginContext) Get(key string) (any, bool)             { return g.c.Get(key) }
+func (g *ginContext) MustGet(key string) any                 { return g.c.MustGet(key) }
+func (g *ginContext) Next()                                  { g.c.Next() }
+func (g *ginContext) Abort()                                 { g.c.Abort() }
+func (g *ginContext) AbortWithStatusJSON(code int, v any)    { g.c.AbortWithStatusJSON(code, v) }
+func (g *ginContext) IsAborted() bool                        { return g.c.IsAborted() }
+
+// Raw returns the underlying *gin.Context for advanced use.
+func (g *ginContext) Raw() *gin.Context { return g.c }
+
+// ---------- wrapHandler helpers ----------
+
+func wrapHandler(h zen.Handler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		h(newContext(c))
+	}
+}
+
+func wrapHandlers(hs []zen.Handler) []gin.HandlerFunc {
+	out := make([]gin.HandlerFunc, len(hs))
+	for i, h := range hs {
+		out[i] = wrapHandler(h)
+	}
+	return out
+}
+
+// ---------- GinEngine ----------
+
 // GinEngine implements zen.Engine backed by gin-gonic/gin.
 type GinEngine struct {
-	engine       *gin.Engine
-	server       *http.Server
-	healthChecks map[string]func() error
+	engine *gin.Engine
+	server *http.Server
 }
 
 var _ zen.Engine = (*GinEngine)(nil)
 
 // NewEngine creates a GinEngine with recovery and logger middleware.
-func NewEngine(logger zen.Logger) *GinEngine {
+// The logger parameter is accepted for future use and API consistency.
+func NewEngine(_ zen.Logger) *GinEngine {
 	gin.SetMode(gin.ReleaseMode)
 	g := gin.New()
 	g.Use(gin.Recovery(), gin.Logger())
 	return &GinEngine{
-		engine:       g,
-		healthChecks: make(map[string]func() error),
+		engine: g,
 	}
 }
 
-// --- RouterGroup (top-level) ---
+// --- Routing (implements zen.Engine) ---
 
 func (e *GinEngine) GET(p string, h ...zen.Handler)    { e.engine.GET(p, wrapHandlers(h)...) }
 func (e *GinEngine) POST(p string, h ...zen.Handler)   { e.engine.POST(p, wrapHandlers(h)...) }
@@ -60,10 +116,6 @@ func (e *GinEngine) Stop(ctx context.Context) error {
 	shutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	return e.server.Shutdown(shutCtx)
-}
-
-func (e *GinEngine) AddHealthCheck(name string, check func() error) {
-	e.healthChecks[name] = check
 }
 
 // Raw returns the underlying *gin.Engine for advanced use.

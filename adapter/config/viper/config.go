@@ -21,10 +21,14 @@ func NewConfig(path string) *ViperConfig {
 	return &ViperConfig{v: v}
 }
 
-func (c *ViperConfig) GetString(key string) string        { return c.v.GetString(key) }
-func (c *ViperConfig) GetInt(key string) int              { return c.v.GetInt(key) }
-func (c *ViperConfig) GetBool(key string) bool            { return c.v.GetBool(key) }
-func (c *ViperConfig) GetStringSlice(key string) []string { return c.v.GetStringSlice(key) }
+func (c *ViperConfig) GetString(key string) string            { return c.v.GetString(key) }
+func (c *ViperConfig) GetInt(key string) int                  { return c.v.GetInt(key) }
+func (c *ViperConfig) GetBool(key string) bool                { return c.v.GetBool(key) }
+func (c *ViperConfig) GetFloat64(key string) float64          { return c.v.GetFloat64(key) }
+func (c *ViperConfig) GetStringSlice(key string) []string     { return c.v.GetStringSlice(key) }
+func (c *ViperConfig) GetStringMap(key string) map[string]any { return c.v.GetStringMap(key) }
+func (c *ViperConfig) IsSet(key string) bool                  { return c.v.IsSet(key) }
+func (c *ViperConfig) Set(key string, value any)              { c.v.Set(key, value) }
 
 func (c *ViperConfig) Sub(key string) zen.Config {
 	sub := c.v.Sub(key)
@@ -44,3 +48,6 @@ func (c *ViperConfig) Unmarshal(key string, v any) error {
 	}
 	return sub.Unmarshal(v)
 }
+
+// Raw returns the underlying *viper.Viper for advanced use.
+func (c *ViperConfig) Raw() *viper.Viper { return c.v }
