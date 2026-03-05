@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"time"
 
@@ -11,7 +12,10 @@ import (
 )
 
 func main() {
-	cfg := viperAdapter.NewConfig("./config.yaml")
+
+	configPath := flag.String("config", "./config/config.toml", "Configuration file path")
+
+	cfg := viperAdapter.NewConfig(*configPath)
 	logger := zapAdapter.NewLogger()
 	eng := ginAdapter.NewEngine(logger)
 
