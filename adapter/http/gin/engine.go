@@ -3,6 +3,10 @@ package ginadapter
 import (
 	"context"
 	"net/http"
+	"runtime/debug"
+	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -70,19 +74,46 @@ func wrapHandlers(hs []zen.Handler) []gin.HandlerFunc {
 type GinEngine struct {
 	engine *gin.Engine
 	server *http.Server
+	logger zen.Logger
 }
 
 var _ zen.Engine = (*GinEngine)(nil)
 
-// NewEngine creates a GinEngine with recovery and logger middleware.
-// The logger parameter is accepted for future use and API consistency.
-func NewEngine(_ zen.Logger) *GinEngine {
+const (
+	requestIDHeader = "X-Request-ID"
+	traceIDHeader   = "X-Trace-ID"
+	spanIDHeader    = "X-Span-ID"
+	requestIDKey    = "request_id"
+	traceIDKey      = "trace_id"
+	spanIDKey       = "span_id"
+)
+
+var requestSequence atomic.Uint64
+
+type discardLogger struct{}
+
+func (discardLogger) Debug(string, ...any) {}
+func (discardLogger) Info(string, ...any)  {}
+func (discardLogger) Warn(string, ...any)  {}
+func (discardLogger) Error(string, ...any) {}
+func (discardLogger) Fatal(string, ...any) {}
+func (discardLogger) With(...any) zen.Logger {
+	return discardLogger{}
+}
+
+// NewEngine creates a GinEngine with structured request logging and panic recovery.
+func NewEngine(logger zen.Logger) *GinEngine {
 	gin.SetMode(gin.ReleaseMode)
 	g := gin.New()
-	g.Use(gin.Recovery(), gin.Logger())
-	return &GinEngine{
-		engine: g,
+	if logger == nil {
+		logger = discardLogger{}
 	}
+	engine := &GinEngine{
+		engine: g,
+		logger: logger,
+	}
+	g.Use(engine.requestContextMiddleware(), engine.accessLogMiddleware(), engine.recoveryMiddleware())
+	return engine
 }
 
 // --- Routing (implements zen.Engine) ---
@@ -137,4 +168,98 @@ func (g *ginRouterGroup) Use(mw ...zen.Handler)             { g.group.Use(wrapHa
 func (g *ginRouterGroup) Group(prefix string, mw ...zen.Handler) zen.RouterGroup {
 	sub := g.group.Group(prefix, wrapHandlers(mw)...)
 	return &ginRouterGroup{group: sub}
+}
+
+func (e *GinEngine) requestContextMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+
+		requestID := strings.TrimSpace(c.GetHeader(requestIDHeader))
+		if requestID == "" {
+			requestID = nextRequestID()
+		}
+		ctx = context.WithValue(ctx, requestIDKey, requestID)
+		c.Request = c.Request.WithContext(ctx)
+		c.Set(requestIDKey, requestID)
+		c.Header(requestIDHeader, requestID)
+
+		if traceID := strings.TrimSpace(c.GetHeader(traceIDHeader)); traceID != "" {
+			ctx = context.WithValue(c.Request.Context(), traceIDKey, traceID)
+			c.Request = c.Request.WithContext(ctx)
+			c.Set(traceIDKey, traceID)
+		}
+		if spanID := strings.TrimSpace(c.GetHeader(spanIDHeader)); spanID != "" {
+			ctx = context.WithValue(c.Request.Context(), spanIDKey, spanID)
+			c.Request = c.Request.WithContext(ctx)
+			c.Set(spanIDKey, spanID)
+		}
+
+		c.Next()
+	}
+}
+
+func (e *GinEngine) accessLogMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+
+		route := c.FullPath()
+		if route == "" {
+			route = c.Request.URL.Path
+		}
+
+		fields := []any{
+			requestIDKey, requestIDFromContext(c),
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+			"route", route,
+			"status", c.Writer.Status(),
+			"latency_ms", time.Since(start).Milliseconds(),
+			"client_ip", c.ClientIP(),
+			"user_agent", c.Request.UserAgent(),
+			"resp_bytes", c.Writer.Size(),
+		}
+		if len(c.Errors) > 0 {
+			fields = append(fields, "errors", c.Errors.String())
+		}
+
+		switch status := c.Writer.Status(); {
+		case status >= http.StatusInternalServerError:
+			e.logger.Error("http request completed", fields...)
+		case status >= http.StatusBadRequest:
+			e.logger.Warn("http request completed", fields...)
+		default:
+			e.logger.Info("http request completed", fields...)
+		}
+	}
+}
+
+func (e *GinEngine) recoveryMiddleware() gin.HandlerFunc {
+	return gin.CustomRecovery(func(c *gin.Context, recovered any) {
+		e.logger.Error(
+			"http panic recovered",
+			requestIDKey, requestIDFromContext(c),
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+			"client_ip", c.ClientIP(),
+			"panic", recovered,
+			"stack", string(debug.Stack()),
+		)
+		c.AbortWithStatus(http.StatusInternalServerError)
+	})
+}
+
+func requestIDFromContext(c *gin.Context) string {
+	if value, exists := c.Get(requestIDKey); exists {
+		if requestID, ok := value.(string); ok && requestID != "" {
+			return requestID
+		}
+	}
+	return ""
+}
+
+func nextRequestID() string {
+	now := strconv.FormatInt(time.Now().UnixNano(), 36)
+	seq := strconv.FormatUint(requestSequence.Add(1), 36)
+	return now + "-" + seq
 }

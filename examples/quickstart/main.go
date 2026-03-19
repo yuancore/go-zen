@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"time"
 
@@ -9,14 +10,20 @@ import (
 	ginAdapter "github.com/yuancore/go-zen/adapter/http/gin"
 	zapAdapter "github.com/yuancore/go-zen/adapter/logger/zap"
 	"github.com/yuancore/go-zen/zen"
+	"go.uber.org/zap"
 )
 
 func main() {
-
-	configPath := flag.String("config", "./config/config.toml", "Configuration file path")
+	configPath := flag.String("config", "./examples/quickstart/config/config.toml", "Configuration file path")
+	flag.Parse()
 
 	cfg := viperAdapter.NewConfig(*configPath)
-	logger := zapAdapter.NewLogger()
+	logger, err := zapAdapter.NewLoggerFromConfig(cfg)
+	if err != nil {
+		log.Fatalf("init logger failed: %v", err)
+	}
+	defer func() { _ = logger.Sync() }()
+
 	eng := ginAdapter.NewEngine(logger)
 
 	app := zen.New(
@@ -26,10 +33,12 @@ func main() {
 		zen.WithStopTimeout(10*time.Second),
 	)
 
-	// 注册模块（示例模块略）
+	// Register components here when needed.
 	// app.Register(dbModule)
 
 	app.GET("/ping", func(c zen.Context) {
+		fmt.Println(app.Config().GetString("logger.encoding"))
+		logger.Error("Received ping request", zap.String("version", app.Config().GetString("logger.encoding")))
 		c.JSON(200, map[string]string{"pong": "ok"})
 	})
 
