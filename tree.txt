@@ -2,6 +2,13 @@
 │   ├── config\
 │   │   └── viper\
 │   │       └── config.go
+│   ├── db\
+│   │   └── gorm\
+│   │       ├── component.go
+│   │       ├── config.go
+│   │       ├── logger.go
+│   │       ├── manager.go
+│   │       └── component_test.go
 │   ├── http\
 │   │   └── gin\
 │   │       └── engine.go

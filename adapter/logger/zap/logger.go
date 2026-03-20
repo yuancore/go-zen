@@ -48,6 +48,7 @@ type Sampling struct {
 
 // Options controls how the zap logger is built.
 type Options struct {
+	Switch            bool           `mapstructure:"switch"`
 	Level             string         `mapstructure:"level"`
 	Encoding          string         `mapstructure:"encoding"`
 	Format            string         `mapstructure:"format"`
@@ -74,6 +75,7 @@ type Options struct {
 // DefaultOptions returns production-safe logger defaults.
 func DefaultOptions() Options {
 	return Options{
+		Switch:           true,
 		Level:            "info",
 		Encoding:         "json",
 		OutputPaths:      []string{"stdout"},
@@ -109,7 +111,15 @@ func MustNewLoggerWithOptions(opts Options) *ZapLogger {
 
 // NewLoggerFromConfig builds a logger from the "logger" config section.
 func NewLoggerFromConfig(cfg zen.Config) (*ZapLogger, error) {
-	return NewLoggerFromConfigKey(cfg, "logger")
+	if cfg != nil {
+		switch {
+		case cfg.IsSet("logger"):
+			return NewLoggerFromConfigKey(cfg, "logger")
+		case cfg.IsSet("log"):
+			return NewLoggerFromConfigKey(cfg, "log")
+		}
+	}
+	return NewLoggerWithOptions(DefaultOptions())
 }
 
 // MustNewLoggerFromConfig builds a logger from config and panics on error.
@@ -295,6 +305,12 @@ type contextKey string
 
 func buildLogger(opts Options) (*ZapLogger, error) {
 	opts = normalizeOptions(opts)
+	if !opts.Switch {
+		return &ZapLogger{
+			l:           zap.NewNop(),
+			contextKeys: append([]string(nil), opts.ContextKeys...),
+		}, nil
+	}
 
 	level, err := parseLevel(opts.Level)
 	if err != nil {
@@ -402,6 +418,9 @@ func parseLevel(raw string) (zapcore.Level, error) {
 	levelText := strings.ToLower(strings.TrimSpace(raw))
 	if levelText == "" {
 		levelText = DefaultOptions().Level
+	}
+	if levelText == "all" {
+		levelText = "debug"
 	}
 	var level zapcore.Level
 	if err := level.UnmarshalText([]byte(levelText)); err != nil {
