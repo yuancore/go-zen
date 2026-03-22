@@ -36,6 +36,33 @@ _ = db
 _ = analytics
 ```
 
+Inside HTTP handlers, use the Laravel-style query entrypoints instead of
+repeating `MustResolveNamed(...).WithContext(...)`:
+
+```go
+app.GET("/users", func(c zen.Context) {
+	var list []map[string]any
+	err := gormadapter.Connection(app, c, "main").
+		Table("sys_admin_users").
+		Limit(20).
+		Find(&list).Error
+	if err != nil {
+		c.JSON(500, map[string]any{"error": err.Error()})
+		return
+	}
+	c.JSON(200, map[string]any{"list": list})
+})
+```
+
+Default connection queries can be even shorter:
+
+```go
+err := gormadapter.DB(app, c).
+	Table("sys_admin_users").
+	Where("status = ?", 1).
+	Find(&list).Error
+```
+
 Recommended config:
 
 ```toml

@@ -1,36 +1,49 @@
-﻿├── adapter\
-│   ├── config\
-│   │   └── viper\
-│   │       └── config.go
-│   ├── db\
-│   │   └── gorm\
-│   │       ├── component.go
-│   │       ├── config.go
-│   │       ├── logger.go
-│   │       ├── manager.go
-│   │       └── component_test.go
-│   ├── http\
-│   │   └── gin\
-│   │       └── engine.go
-│   └── logger\
-│       └── zap\
-│           └── logger.go
-├── examples\
-│   └── quickstart\
-│       └── main.go
-├── zen\
-│   ├── app.go
-│   ├── component.go
-│   ├── container.go
-│   ├── context.go
-│   ├── defaults.go
-│   ├── interfaces.go
-│   ├── option.go
-│   ├── router.go
-│   └── topo.go
-├── go.mod
-├── go.sum
-├── LICENSE
-├── README.md
-├── VERSION
-└── tree.txt
+﻿.
++-- adapter
+|   +-- config
+|   |   \-- viper
+|   |       +-- config.go
+|   |       \-- config_test.go
+|   +-- db
+|   |   \-- gorm
+|   |       +-- component.go
+|   |       +-- component_test.go
+|   |       +-- config.go
+|   |       +-- logger.go
+|   |       +-- logger_test.go
+|   |       +-- manager.go
+|   |       +-- request.go
+|   |       \-- request_test.go
+|   +-- http
+|   |   \-- gin
+|   |       \-- engine.go
+|   \-- logger
+|       \-- zap
+|           +-- logger.go
+|           \-- logger_test.go
++-- examples
+|   \-- quickstart
+|       +-- config
+|       |   \-- config.toml
+|       +-- log
+|       |   \-- app.log
+|       +-- main.go
+|       \-- main_test.go
++-- log
+|   \-- app.log
++-- zen
+|   +-- app.go
+|   +-- component.go
+|   +-- container.go
+|   +-- context.go
+|   +-- defaults.go
+|   +-- interfaces.go
+|   +-- option.go
+|   +-- router.go
+|   \-- topo.go
++-- go.mod
++-- go.sum
++-- LICENSE
++-- README.md
++-- tree.txt
+\-- VERSION
