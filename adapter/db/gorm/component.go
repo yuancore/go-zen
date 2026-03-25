@@ -224,6 +224,7 @@ func openConnection(conn ConnectionConfig, logger zen.Logger) (*gorm.DB, error) 
 		SkipDefaultTransaction:   conn.effectiveSkipDefaultTransaction,
 		DisableNestedTransaction: conn.effectiveDisableNestedTransaction,
 		DisableAutomaticPing:     true,
+		TranslateError:           true,
 		PrepareStmt:              conn.effectivePrepareStmt,
 		Logger: newSQLLogger(
 			logger.With("db", conn.Name, "driver", conn.Driver),

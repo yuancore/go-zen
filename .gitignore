@@ -2,3 +2,4 @@
 vendor/
 quickstart.exe
 log/
+examples/quickstart/data/*.db

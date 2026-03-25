@@ -72,9 +72,10 @@ func wrapHandlers(hs []zen.Handler) []gin.HandlerFunc {
 
 // GinEngine implements zen.Engine backed by gin-gonic/gin.
 type GinEngine struct {
-	engine *gin.Engine
-	server *http.Server
-	logger zen.Logger
+	engine        *gin.Engine
+	server        *http.Server
+	logger        zen.Logger
+	serverOptions ServerOptions
 }
 
 var _ zen.Engine = (*GinEngine)(nil)
@@ -101,16 +102,41 @@ func (discardLogger) With(...any) zen.Logger {
 	return discardLogger{}
 }
 
+type ServerOptions struct {
+	ReadTimeout       time.Duration
+	ReadHeaderTimeout time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	MaxHeaderBytes    int
+}
+
+func DefaultServerOptions() ServerOptions {
+	return ServerOptions{
+		ReadTimeout:       15 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+}
+
 // NewEngine creates a GinEngine with structured request logging and panic recovery.
 func NewEngine(logger zen.Logger) *GinEngine {
+	return NewEngineWithOptions(logger, DefaultServerOptions())
+}
+
+// NewEngineWithOptions creates a GinEngine with explicit HTTP server timeouts.
+func NewEngineWithOptions(logger zen.Logger, options ServerOptions) *GinEngine {
 	gin.SetMode(gin.ReleaseMode)
 	g := gin.New()
 	if logger == nil {
 		logger = discardLogger{}
 	}
+	_ = g.SetTrustedProxies(nil)
 	engine := &GinEngine{
-		engine: g,
-		logger: logger,
+		engine:        g,
+		logger:        logger,
+		serverOptions: normalizeServerOptions(options),
 	}
 	g.Use(engine.requestContextMiddleware(), engine.accessLogMiddleware(), engine.recoveryMiddleware())
 	return engine
@@ -136,7 +162,15 @@ func (e *GinEngine) Start(addr string) error {
 	e.engine.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
 	})
-	e.server = &http.Server{Addr: addr, Handler: e.engine}
+	e.server = &http.Server{
+		Addr:              addr,
+		Handler:           e.engine,
+		ReadTimeout:       e.serverOptions.ReadTimeout,
+		ReadHeaderTimeout: e.serverOptions.ReadHeaderTimeout,
+		WriteTimeout:      e.serverOptions.WriteTimeout,
+		IdleTimeout:       e.serverOptions.IdleTimeout,
+		MaxHeaderBytes:    e.serverOptions.MaxHeaderBytes,
+	}
 	return e.server.ListenAndServe()
 }
 
@@ -262,4 +296,26 @@ func nextRequestID() string {
 	now := strconv.FormatInt(time.Now().UnixNano(), 36)
 	seq := strconv.FormatUint(requestSequence.Add(1), 36)
 	return now + "-" + seq
+}
+
+func normalizeServerOptions(options ServerOptions) ServerOptions {
+	defaults := DefaultServerOptions()
+
+	if options.ReadTimeout <= 0 {
+		options.ReadTimeout = defaults.ReadTimeout
+	}
+	if options.ReadHeaderTimeout <= 0 {
+		options.ReadHeaderTimeout = defaults.ReadHeaderTimeout
+	}
+	if options.WriteTimeout <= 0 {
+		options.WriteTimeout = defaults.WriteTimeout
+	}
+	if options.IdleTimeout <= 0 {
+		options.IdleTimeout = defaults.IdleTimeout
+	}
+	if options.MaxHeaderBytes <= 0 {
+		options.MaxHeaderBytes = defaults.MaxHeaderBytes
+	}
+
+	return options
 }
