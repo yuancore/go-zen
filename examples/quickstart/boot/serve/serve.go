@@ -1,73 +1,93 @@
 package serve
 
 import (
+	"context"
 	"flag"
-	"os"
+	"strings"
 	"time"
 
 	zgin "github.com/yuancore/go-zen/adapter/http/gin"
 	zlog "github.com/yuancore/go-zen/adapter/logger/zap"
+	"github.com/yuancore/go-zen/examples/quickstart/app/http/api"
+	"github.com/yuancore/go-zen/examples/quickstart/app/service"
 	"github.com/yuancore/go-zen/examples/quickstart/boot/router"
 	"github.com/yuancore/go-zen/zen"
 )
 
-func RunCLI(defaultConfigPath string) error {
-	flagSet := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
-	configPath := flagSet.String("config", defaultConfigPath, "Configuration file path")
-	if err := flagSet.Parse(os.Args[1:]); err != nil {
-		return err
-	}
+// RunCLI 命令行入口
+func RunCLI() error {
+	configPath := flag.String("config", "config/config.toml", "configuration file path")
+	flag.Parse()
 	return Run(*configPath)
 }
 
+// Run 启动应用
 func Run(configPath string) error {
 	app, err := Build(configPath)
 	if err != nil {
 		return err
 	}
-
-	runErr := app.Run(serverAddress(app.Config()))
-	syncLogger(app.Logger())
-	return runErr
+	return app.Run(serverAddress(app.Config()))
 }
 
+// Build 构建应用实例
 func Build(configPath string) (*zen.App, error) {
-	config, baseDir, err := loadConfig(configPath)
+	cfg, err := loadConfig(configPath)
 	if err != nil {
 		return nil, err
 	}
 
-	logger, err := zlog.NewLoggerFromConfig(config)
+	logger, err := zlog.NewLoggerFromConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	app := zen.New(
-		zen.Name(appName(config)),
-		zen.WithConfig(config),
+		zen.Name(appName(cfg)),
+		zen.WithConfig(cfg),
 		zen.WithLogger(logger),
 		zen.WithEngine(zgin.NewEngine(logger)),
 		zen.StopTimeout(10*time.Second),
 	)
 
-	dbComponent, err := newDatabaseComponent(config, baseDir)
+	// 初始化数据库（使用 connections 数组中的第一个连接，可根据需要修改）
+	db, err := newDB(cfg)
 	if err != nil {
 		return nil, err
 	}
-	app.Use(dbComponent)
+	app.Use(db)
 
-	services := newServices(app)
-	registerStartupHooks(app, services.userService)
+	// 依赖组装
 
-	if err := router.Register(app, services.systemAPI, services.userAPI); err != nil {
+	userService := service.NewUserService(userDAO, logger)
+	systemAPI := api.NewSystemAPI(app, logger)
+	userAPI := api.NewUserAPI(userService, logger)
+
+	app.OnStart(func() error {
+		return userService.Migrate(context.Background())
+	})
+
+	if err := router.Register(app, systemAPI, userAPI); err != nil {
 		return nil, err
 	}
 
 	return app, nil
 }
 
-func syncLogger(logger zen.Logger) {
-	if synced, ok := logger.(interface{ Sync() error }); ok {
-		_ = synced.Sync()
+func serverAddress(cfg zen.Config) string {
+	addr := strings.TrimSpace(cfg.GetString("system.address"))
+	if addr == "" {
+		addr = "8080"
 	}
+	if !strings.HasPrefix(addr, ":") {
+		addr = ":" + addr
+	}
+	return addr
+}
+
+func appName(cfg zen.Config) string {
+	if name := strings.TrimSpace(cfg.GetString("system.app_name")); name != "" {
+		return name
+	}
+	return "go-zen-quickstart"
 }

@@ -2,110 +2,71 @@ package dao
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"strings"
 
-	zdb "github.com/yuancore/go-zen/adapter/db/gorm"
 	"github.com/yuancore/go-zen/examples/quickstart/app/entity/models"
-	"github.com/yuancore/go-zen/zen"
 	"gorm.io/gorm"
 )
 
-type UserListFilter struct {
-	Page    int
-	Size    int
-	Keyword string
-	Status  *int8
+type CardsDao struct {
+	db     *gorm.DB
+	models *models.User
 }
 
-type UserDAO struct {
-	app *zen.App
+func NewCardsDao(ctx context.Context, db *gorm.DB) *CardsDao {
+	if db == nil {
+		db = ant.Db()
+	}
+	return &CardsDao{db: db.WithContext(ctx)}
 }
 
-func NewUserDAO(app *zen.App) *UserDAO {
-	return &UserDAO{app: app}
+// Create
+func (dao *CardsDao) Create(cards *models.User) (int, error) {
+	if err := dao.db.Create(cards).Error; err != nil {
+		return 0, err
+	}
+	return cards.Id, nil
 }
 
-func (d *UserDAO) AutoMigrate(ctx context.Context) error {
-	return d.db(ctx).AutoMigrate(&models.User{})
+// DeleteById
+func (dao *CardsDao) DeleteById(id int) error {
+	return dao.db.Delete(&dao.models, id).Error
 }
 
-func (d *UserDAO) Create(ctx context.Context, user *models.User) error {
-	if user == nil {
-		return errors.New("create user: nil entity")
-	}
-	return d.db(ctx).Create(user).Error
+// DeleteByIds
+func (dao *CardsDao) DeleteByIds(id []int) error {
+	return dao.db.Delete(&dao.models, id).Error
 }
 
-func (d *UserDAO) Update(ctx context.Context, user *models.User) error {
-	if user == nil {
-		return errors.New("update user: nil entity")
-	}
-	tx := d.db(ctx).Save(user)
-	if tx.Error != nil {
-		return tx.Error
-	}
-	if tx.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
+// Update
+func (dao *CardsDao) Update(cards models.User) error {
+	return dao.db.Updates(&cards).Error
 }
 
-func (d *UserDAO) Delete(ctx context.Context, id uint64) error {
-	tx := d.db(ctx).Delete(&models.User{}, id)
-	if tx.Error != nil {
-		return tx.Error
-	}
-	if tx.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return nil
+// GetList
+func (dao *CardsDao) GetList() (list []models.User) {
+	dao.db.Model(&dao.models).Find(&list)
+	return list
 }
 
-func (d *UserDAO) GetByID(ctx context.Context, id uint64) (*models.User, error) {
-	var user models.User
-	if err := d.db(ctx).First(&user, id).Error; err != nil {
-		return nil, err
-	}
-	return &user, nil
+// GetPage
+func (dao *CardsDao) GetPage(page page.PageParam) (list []models.Cards, total int64, err error) {
+	err = dao.db.Model(&dao.models).Scopes(
+		asql.Where("project_id", "=", page.FilterMap["project_id"]), asql.Where("name", "LIKE", "%"+conv.String(page.FilterMap["name"])+"%"), asql.Where("is_pay_later", "=", page.FilterMap["is_pay_later"]), asql.Where("status", "=", page.FilterMap["status"]), asql.Where("is_revoke_on_refund", "=", page.FilterMap["is_revoke_on_refund"]), asql.Where("created_at", "BETWEEN", page.FilterMap["created_at"]),
+		asql.Filters(page.Filter),
+		asql.Order(page.Order, page.Desc),
+		asql.Paginate(page.PageSize, page.CurrentPage),
+	).Find(&list).Offset(-1).Limit(1).Count(&total).Error
+	return list, total, err
 }
 
-func (d *UserDAO) List(ctx context.Context, filter UserListFilter) ([]models.User, int64, error) {
-	query := d.db(ctx).Model(&models.User{})
-
-	if keyword := strings.TrimSpace(filter.Keyword); keyword != "" {
-		pattern := "%" + keyword + "%"
-		query = query.Where("username LIKE ? OR nickname LIKE ? OR email LIKE ?", pattern, pattern, pattern)
-	}
-	if filter.Status != nil {
-		query = query.Where("status = ?", *filter.Status)
-	}
-
+func (dao *CardsDao) CountRelatedOrders(cardIds []int) (int64, error) {
 	var total int64
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, fmt.Errorf("count users: %w", err)
-	}
-	if total == 0 {
-		return []models.User{}, 0, nil
-	}
-
-	users := make([]models.User, 0, filter.Size)
-	if err := query.
-		Order("id DESC").
-		Offset((filter.Page - 1) * filter.Size).
-		Limit(filter.Size).
-		Find(&users).Error; err != nil {
-		return nil, 0, fmt.Errorf("list users: %w", err)
-	}
-
-	return users, total, nil
+	err := dao.db.Model(&models.Orders{}).Where("card_id IN ?", cardIds).Count(&total).Error
+	return total, err
 }
 
-func (d *UserDAO) db(ctx context.Context) *gorm.DB {
-	db := zdb.MustResolve(d.app)
-	if ctx == nil {
-		return db
-	}
-	return db.WithContext(ctx)
+// GetById
+func (dao *CardsDao) GetById(id int) (row models.Cards) {
+	dao.db.Model(&dao.models).Where("id=?", id).Limit(1).Find(&row)
+	return row
 }
