@@ -10,29 +10,33 @@ import (
 	"github.com/yuancore/go-zen/zen"
 )
 
-func Register(app *zen.App, systemAPI *api.SystemAPI, userAPI *api.UserAPI) error {
-	switch {
-	case app == nil:
+// Register wires up all routes. It is called from serve.OnStart so that
+// the database component is already initialized in the container.
+func Register(app *zen.App) error {
+	if app == nil {
 		return fmt.Errorf("register routes: nil app")
-	case systemAPI == nil:
-		return fmt.Errorf("register routes: nil system api")
-	case userAPI == nil:
-		return fmt.Errorf("register routes: nil user api")
 	}
 
+	// Global middleware
 	app.Middleware(
 		middleware.SecurityHeaders(),
 		middleware.MaxBodyBytes(httpapp.RequestBodyLimitBytes(app.Config())),
 	)
 
-	app.GET(routes.Ping, systemAPI.Ping)
+	// Controllers — db is resolved lazily per-request via gormadapter.DB(app, ctx)
+	sysCtrl := api.NewSystemController()
+	ordersCtrl := api.NewOrdersController(app)
 
-	apiV1 := app.Group(routes.APIV1)
-	apiV1.GET(routes.Users, userAPI.List)
-	apiV1.GET(routes.UserByID, userAPI.Get)
-	apiV1.POST(routes.Users, userAPI.Create)
-	apiV1.PUT(routes.UserByID, userAPI.Update)
-	apiV1.DELETE(routes.UserByID, userAPI.Delete)
+	// Health / liveness
+	app.GET(routes.Ping, sysCtrl.Ping)
+
+	// Orders CRUD
+	v1 := app.Group(routes.APIV1)
+	v1.GET(routes.Orders, ordersCtrl.Index)
+	v1.GET(routes.OrderByID, ordersCtrl.Show)
+	v1.POST(routes.Orders, ordersCtrl.Create)
+	v1.PUT(routes.OrderByID, ordersCtrl.Update)
+	v1.DELETE(routes.Orders, ordersCtrl.Delete)
 
 	return nil
 }

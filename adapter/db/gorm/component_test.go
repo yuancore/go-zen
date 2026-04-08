@@ -2,6 +2,7 @@ package gormadapter
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -104,8 +105,15 @@ func (testEngine) POST(string, ...zen.Handler)                  {}
 func (testEngine) PUT(string, ...zen.Handler)                   {}
 func (testEngine) DELETE(string, ...zen.Handler)                {}
 func (testEngine) PATCH(string, ...zen.Handler)                 {}
+func (testEngine) HEAD(string, ...zen.Handler)                  {}
+func (testEngine) OPTIONS(string, ...zen.Handler)               {}
+func (testEngine) Any(string, ...zen.Handler)                   {}
+func (testEngine) Handle(string, string, ...zen.Handler)        {}
 func (testEngine) Use(...zen.Handler)                           {}
 func (testEngine) Group(string, ...zen.Handler) zen.RouterGroup { return testRouterGroup{} }
+func (testEngine) StaticFile(string, string)                    {}
+func (testEngine) Static(string, string)                        {}
+func (testEngine) StaticFS(string, http.FileSystem)             {}
 func (testEngine) Start(string) error                           { return nil }
 func (testEngine) Stop(context.Context) error                   { return nil }
 
@@ -116,8 +124,15 @@ func (testRouterGroup) POST(string, ...zen.Handler)                  {}
 func (testRouterGroup) PUT(string, ...zen.Handler)                   {}
 func (testRouterGroup) DELETE(string, ...zen.Handler)                {}
 func (testRouterGroup) PATCH(string, ...zen.Handler)                 {}
+func (testRouterGroup) HEAD(string, ...zen.Handler)                  {}
+func (testRouterGroup) OPTIONS(string, ...zen.Handler)               {}
+func (testRouterGroup) Any(string, ...zen.Handler)                   {}
+func (testRouterGroup) Handle(string, string, ...zen.Handler)        {}
 func (testRouterGroup) Use(...zen.Handler)                           {}
 func (testRouterGroup) Group(string, ...zen.Handler) zen.RouterGroup { return testRouterGroup{} }
+func (testRouterGroup) StaticFile(string, string)                    {}
+func (testRouterGroup) Static(string, string)                        {}
+func (testRouterGroup) StaticFS(string, http.FileSystem)             {}
 
 var _ zen.Engine = testEngine{}
 var _ zen.RouterGroup = testRouterGroup{}

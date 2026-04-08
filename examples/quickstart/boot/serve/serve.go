@@ -1,27 +1,25 @@
 package serve
 
 import (
-	"context"
 	"flag"
 	"strings"
 	"time"
 
+	gormadapter "github.com/yuancore/go-zen/adapter/db/gorm"
 	zgin "github.com/yuancore/go-zen/adapter/http/gin"
 	zlog "github.com/yuancore/go-zen/adapter/logger/zap"
-	"github.com/yuancore/go-zen/examples/quickstart/app/http/api"
-	"github.com/yuancore/go-zen/examples/quickstart/app/service"
 	"github.com/yuancore/go-zen/examples/quickstart/boot/router"
 	"github.com/yuancore/go-zen/zen"
 )
 
-// RunCLI 命令行入口
+// RunCLI is the CLI entrypoint.
 func RunCLI() error {
 	configPath := flag.String("config", "config/config.toml", "configuration file path")
 	flag.Parse()
 	return Run(*configPath)
 }
 
-// Run 启动应用
+// Run loads config and starts the application.
 func Run(configPath string) error {
 	app, err := Build(configPath)
 	if err != nil {
@@ -30,7 +28,8 @@ func Run(configPath string) error {
 	return app.Run(serverAddress(app.Config()))
 }
 
-// Build 构建应用实例
+// Build constructs the application without starting it.
+// Component Init (including DB connections) happens inside app.Run().
 func Build(configPath string) (*zen.App, error) {
 	cfg, err := loadConfig(configPath)
 	if err != nil {
@@ -50,26 +49,15 @@ func Build(configPath string) (*zen.App, error) {
 		zen.StopTimeout(10*time.Second),
 	)
 
-	// 初始化数据库（使用 connections 数组中的第一个连接，可根据需要修改）
-	db, err := newDB(cfg)
-	if err != nil {
-		return nil, err
-	}
-	app.Use(db)
+	// Register database component: reads [database] / [[connections]] from config.
+	// Init is deferred until app.Run() kicks off the component lifecycle.
+	app.Use(gormadapter.New())
 
-	// 依赖组装
-
-	userService := service.NewUserService(userDAO, logger)
-	systemAPI := api.NewSystemAPI(app, logger)
-	userAPI := api.NewUserAPI(userService, logger)
-
+	// Register routes after all components have been initialized so the DB is
+	// already available in the container via gormadapter.DB(app, ctx).
 	app.OnStart(func() error {
-		return userService.Migrate(context.Background())
+		return router.Register(app)
 	})
-
-	if err := router.Register(app, systemAPI, userAPI); err != nil {
-		return nil, err
-	}
 
 	return app, nil
 }

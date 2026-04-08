@@ -1,13 +1,11 @@
 package vo
 
-import (
-	"time"
+import "time"
 
-	"github.com/yuancore/go-zen/examples/quickstart/app/entity/models"
-)
-
+// User is the view object for the user resource.
+// Populate from any user model via the field assignments below.
 type User struct {
-	ID        uint64    `json:"id"`
+	ID        int       `json:"id"`
 	Username  string    `json:"username"`
 	Nickname  string    `json:"nickname"`
 	Email     string    `json:"email"`
@@ -15,17 +13,4 @@ type User struct {
 	Status    int8      `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
-}
-
-func NewUser(model models.User) User {
-	return User{
-		ID:        model.ID,
-		Username:  model.Username,
-		Nickname:  model.Nickname,
-		Email:     model.Email,
-		Phone:     model.Phone,
-		Status:    model.Status,
-		CreatedAt: model.CreatedAt,
-		UpdatedAt: model.UpdatedAt,
-	}
 }

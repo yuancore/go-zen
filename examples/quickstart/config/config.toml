@@ -1,89 +1,49 @@
-#系统配置
+# 系统配置
 [system]
-#启动地址
-address = "9000"
-#是否开启跨域
-cors = true
-#是否开发调试模式
-debug = true
-#项目名称
-app_name = "examples"
+address    = "9000"
+cors       = true
+debug      = true
+app_name   = "go-zen-quickstart"
+request_body_limit_bytes = 1048576  # 1 MiB
 
-#接口请求日志
+# 日志配置
 [log]
-#路径
-path = "./log/app.log"
-#输出格式 支持(json、console)
-format = "json"
-#日志服务名称
-service_name = "examples"
-#日志输出等级 all、info、warn、error、debug、dpanic、panic、fatal
-level = "all"
-#是否输出控制台
-console = false
-#是否开启日志
-switch = true
-#文件最长保存时间(天)
-max_age = 180
-#分割大小(MB)
-max_size = 10
-#保留30个备份(个)
-max_backups = 200
-#是否需要压缩
-compress = false
-#请求头白名单
-header_whitelist = ["*"]
-#记录请求请求Body
-request_body = true
-#是否打印响应主体
-response_body = true
+path           = "./log/app.log"
+format         = "json"           # json | console
+service_name   = "go-zen-quickstart"
+level          = "info"           # debug | info | warn | error
+console        = true
+switch         = true
+max_age        = 30
+max_size       = 100
+max_backups    = 30
+compress       = false
+skip_paths     = []
 
-#跳过路由打印
-skip_paths = []
+# 数据库配置
+# go-zen 同时支持两种写法：
+#   A. [database] + [[database.connections]]  (推荐)
+#   B. [[connections]]                         (antgo 兼容)
+[database]
+default      = "main"
+prepare_stmt = true
+skip_default_transaction = true
 
-#数据库设置
-[[connections]]
-#数据库名称(必须唯一)
-name = "mysql1"
-#数据库类型支持mysql、pgsql、sqlsrv、clickhouse
-type = "mysql"
-#服务器地址
-hostname = "127.0.0.1"
-#服务器端口
-port = "3306"
-#数据库用户名
-username = "root"
-#数据库密码
-password = "root"
-#数据库名
-database = "loan_dev"
-#数据库连接参数
-params = "charset=utf8mb4&collation=utf8mb4_bin&parseTime=True&loc=Local&timeout=30s&readTimeout=60s&writeTimeout=60s"
-#是否开启日志
-log = true
-#设置空闲连接池中的最大连接数
-max_idle_conns = 100
-#设置数据库的最大打开连接数。
-max_open_conns = 200
-#设置连接可能被重用的最大时间(秒)。
-conn_max_lifetime = 300
-#设置连接最大生命周期(小时)。
-conn_max_idle_time = 1
-#日志等级,1=静默;2=错误;3=警告;4=信息
-level = 4
+  [database.logger]
+  enabled              = true
+  level                = "warn"
+  slow_threshold_millis = 200
 
-#Redis配置
-[[redis]]
-name = "redis"
-address = "127.0.0.1:6379"
-password = "pi3.1415926"
-db = 0
-
-#Json web token
-[jwt]
-#过期时间(小时)
-exp = 360
-#私钥
-private_key = ""
-#公钥
-public_key = ""
+  [[database.connections]]
+  name     = "main"
+  driver   = "mysql"
+  host     = "127.0.0.1"
+  port     = 3306
+  username = "root"
+  password = "root"
+  database = "loan_dev"
+  params   = "charset=utf8mb4&parseTime=True&loc=Local&timeout=10s"
+  max_idle_conns        = 10
+  max_open_conns        = 100
+  conn_max_lifetime     = 3600
+  conn_max_idle_time    = 600

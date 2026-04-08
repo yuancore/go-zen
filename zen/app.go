@@ -3,6 +3,7 @@ package zen
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
@@ -126,6 +127,18 @@ func (a *App) DELETE(path string, h ...Handler) { a.engine.DELETE(path, h...) }
 // PATCH registers a handler for PATCH requests.
 func (a *App) PATCH(path string, h ...Handler) { a.engine.PATCH(path, h...) }
 
+// HEAD registers a handler for HEAD requests.
+func (a *App) HEAD(path string, h ...Handler) { a.engine.HEAD(path, h...) }
+
+// OPTIONS registers a handler for OPTIONS requests.
+func (a *App) OPTIONS(path string, h ...Handler) { a.engine.OPTIONS(path, h...) }
+
+// Any registers a handler for all HTTP methods.
+func (a *App) Any(path string, h ...Handler) { a.engine.Any(path, h...) }
+
+// Handle registers a handler for the specified HTTP method.
+func (a *App) Handle(method, path string, h ...Handler) { a.engine.Handle(method, path, h...) }
+
 // Group creates a new route group with the given prefix and optional middleware.
 func (a *App) Group(prefix string, mw ...Handler) RouterGroup {
 	return a.engine.Group(prefix, mw...)
@@ -134,6 +147,21 @@ func (a *App) Group(prefix string, mw ...Handler) RouterGroup {
 // Middleware adds global HTTP middleware.
 func (a *App) Middleware(mw ...Handler) {
 	a.engine.Use(mw...)
+}
+
+// StaticFile serves a single file at the given path.
+func (a *App) StaticFile(relativePath, filepath string) {
+	a.engine.StaticFile(relativePath, filepath)
+}
+
+// Static serves files from the given root directory.
+func (a *App) Static(relativePath, root string) {
+	a.engine.Static(relativePath, root)
+}
+
+// StaticFS serves files from the given file system.
+func (a *App) StaticFS(relativePath string, fs http.FileSystem) {
+	a.engine.StaticFS(relativePath, fs)
 }
 
 // ---------- Service Container ----------

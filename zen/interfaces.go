@@ -1,6 +1,9 @@
 package zen
 
-import "context"
+import (
+	"context"
+	"net/http"
+)
 
 // Config abstracts application configuration.
 // The default implementation uses spf13/viper.
@@ -39,16 +42,25 @@ type Logger interface {
 }
 
 // Engine abstracts the HTTP server engine (routing + lifecycle).
-// The default implementation uses gin-gonic/gin via the adapter package.
+// All standard gin routing methods are exposed for full compatibility.
 type Engine interface {
-	// Routing
+	// Standard HTTP methods
 	GET(path string, h ...Handler)
 	POST(path string, h ...Handler)
 	PUT(path string, h ...Handler)
 	DELETE(path string, h ...Handler)
 	PATCH(path string, h ...Handler)
+	HEAD(path string, h ...Handler)
+	OPTIONS(path string, h ...Handler)
+	Any(path string, h ...Handler)
+	Handle(method, path string, h ...Handler)
 	Use(mw ...Handler)
 	Group(prefix string, mw ...Handler) RouterGroup
+
+	// Static file serving
+	StaticFile(relativePath, filepath string)
+	Static(relativePath, root string)
+	StaticFS(relativePath string, fs http.FileSystem)
 
 	// Lifecycle
 	Start(addr string) error

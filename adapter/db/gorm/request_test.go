@@ -2,6 +2,7 @@ package gormadapter
 
 import (
 	"context"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -123,27 +124,88 @@ type testZenContext struct {
 	request *http.Request
 }
 
-func (c testZenContext) Param(string) string                 { return "" }
-func (c testZenContext) Query(string) string                 { return "" }
-func (c testZenContext) DefaultQuery(string, string) string  { return "" }
-func (c testZenContext) Header(string) string                { return "" }
-func (c testZenContext) SetHeader(string, string)            {}
-func (c testZenContext) BindJSON(any) error                  { return nil }
-func (c testZenContext) BindQuery(any) error                 { return nil }
-func (c testZenContext) ShouldBind(any) error                { return nil }
-func (c testZenContext) JSON(int, any)                       {}
-func (c testZenContext) String(int, string, ...any)          {}
-func (c testZenContext) Data(int, string, []byte)            {}
-func (c testZenContext) Status(int)                          {}
-func (c testZenContext) Redirect(int, string)                {}
+// --- Path / Query ---
+func (c testZenContext) Param(string) string                { return "" }
+func (c testZenContext) Query(string) string                { return "" }
+func (c testZenContext) DefaultQuery(string, string) string { return "" }
+func (c testZenContext) GetQuery(string) (string, bool)     { return "", false }
+func (c testZenContext) QueryArray(string) []string         { return nil }
+func (c testZenContext) QueryMap(string) map[string]string  { return nil }
+
+// --- Headers ---
+func (c testZenContext) Header(string) string        { return "" }
+func (c testZenContext) SetHeader(string, string)    {}
+func (c testZenContext) ContentType() string         { return "" }
+func (c testZenContext) GetRawData() ([]byte, error) { return nil, nil }
+func (c testZenContext) IsWebsocket() bool           { return false }
+
+// --- Bind ---
+func (c testZenContext) Bind(any) error       { return nil }
+func (c testZenContext) BindJSON(any) error   { return nil }
+func (c testZenContext) BindQuery(any) error  { return nil }
+func (c testZenContext) BindUri(any) error    { return nil }
+func (c testZenContext) BindHeader(any) error { return nil }
+
+// --- ShouldBind ---
+func (c testZenContext) ShouldBind(any) error       { return nil }
+func (c testZenContext) ShouldBindJSON(any) error   { return nil }
+func (c testZenContext) ShouldBindQuery(any) error  { return nil }
+func (c testZenContext) ShouldBindUri(any) error    { return nil }
+func (c testZenContext) ShouldBindHeader(any) error { return nil }
+
+// --- Form ---
+func (c testZenContext) PostForm(string) string                { return "" }
+func (c testZenContext) DefaultPostForm(string, string) string { return "" }
+func (c testZenContext) GetPostForm(string) (string, bool)     { return "", false }
+func (c testZenContext) PostFormArray(string) []string         { return nil }
+func (c testZenContext) PostFormMap(string) map[string]string  { return nil }
+
+// --- Multipart ---
+func (c testZenContext) FormFile(string) (*multipart.FileHeader, error)       { return nil, nil }
+func (c testZenContext) MultipartForm() (*multipart.Form, error)              { return nil, nil }
+func (c testZenContext) SaveUploadedFile(*multipart.FileHeader, string) error { return nil }
+
+// --- Cookie ---
+func (c testZenContext) Cookie(string) (string, error)                             { return "", nil }
+func (c testZenContext) SetCookie(string, string, int, string, string, bool, bool) {}
+func (c testZenContext) SetSameSite(http.SameSite)                                 {}
+
+// --- Response ---
+func (c testZenContext) JSON(int, any)              {}
+func (c testZenContext) SecureJSON(int, any)        {}
+func (c testZenContext) JSONP(int, any)             {}
+func (c testZenContext) IndentedJSON(int, any)      {}
+func (c testZenContext) AsciiJSON(int, any)         {}
+func (c testZenContext) PureJSON(int, any)          {}
+func (c testZenContext) XML(int, any)               {}
+func (c testZenContext) YAML(int, any)              {}
+func (c testZenContext) String(int, string, ...any) {}
+func (c testZenContext) Data(int, string, []byte)   {}
+func (c testZenContext) Status(int)                 {}
+func (c testZenContext) Redirect(int, string)       {}
+
+// --- Underlying ---
 func (c testZenContext) Request() *http.Request              { return c.request }
 func (c testZenContext) ResponseWriter() http.ResponseWriter { return httptest.NewRecorder() }
 func (c testZenContext) ClientIP() string                    { return "" }
 func (c testZenContext) FullPath() string                    { return "" }
-func (c testZenContext) Set(string, any)                     {}
-func (c testZenContext) Get(string) (any, bool)              { return nil, false }
-func (c testZenContext) MustGet(string) any                  { return nil }
-func (c testZenContext) Next()                               {}
-func (c testZenContext) Abort()                              {}
-func (c testZenContext) AbortWithStatusJSON(int, any)        {}
-func (c testZenContext) IsAborted() bool                     { return false }
+
+// --- Store ---
+func (c testZenContext) Set(string, any)                             {}
+func (c testZenContext) Get(string) (any, bool)                      { return nil, false }
+func (c testZenContext) MustGet(string) any                          { return nil }
+func (c testZenContext) GetString(string) string                     { return "" }
+func (c testZenContext) GetBool(string) bool                         { return false }
+func (c testZenContext) GetInt(string) int                           { return 0 }
+func (c testZenContext) GetInt64(string) int64                       { return 0 }
+func (c testZenContext) GetFloat64(string) float64                   { return 0 }
+func (c testZenContext) GetStringSlice(string) []string              { return nil }
+func (c testZenContext) GetStringMap(string) map[string]any          { return nil }
+func (c testZenContext) GetStringMapString(string) map[string]string { return nil }
+
+// --- Flow ---
+func (c testZenContext) Next()                        {}
+func (c testZenContext) Abort()                       {}
+func (c testZenContext) AbortWithStatus(int)          {}
+func (c testZenContext) AbortWithStatusJSON(int, any) {}
+func (c testZenContext) IsAborted() bool              { return false }
