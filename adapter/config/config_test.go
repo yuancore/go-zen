@@ -1,4 +1,4 @@
-package viperadapter
+package config
 
 import (
 	"os"
@@ -32,7 +32,7 @@ host = "127.0.0.1"
 		t.Fatalf("write override config: %v", err)
 	}
 
-	cfg := NewConfig(basePath, overridePath)
+	cfg := New(basePath, overridePath)
 
 	if got := cfg.GetString("app.name"); got != "go-zen" {
 		t.Fatalf("expected app.name=go-zen, got %q", got)
@@ -62,7 +62,7 @@ level = "info"
 		t.Fatalf("write config: %v", err)
 	}
 
-	cfg := NewConfig(configPath)
+	cfg := New(configPath)
 	if got := cfg.GetString("logger.level"); got != "error" {
 		t.Fatalf("expected env override logger.level=error, got %q", got)
 	}

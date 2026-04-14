@@ -1,4 +1,4 @@
-package zapadapter
+package zlog
 
 import (
 	"context"
@@ -109,8 +109,8 @@ func MustNewLoggerWithOptions(opts Options) *ZapLogger {
 	return logger
 }
 
-// NewLoggerFromConfig builds a logger from the "logger" config section.
-func NewLoggerFromConfig(cfg zen.Config) (*ZapLogger, error) {
+// New builds a logger from the "logger" config section.
+func New(cfg zen.Config) (*ZapLogger, error) {
 	if cfg != nil {
 		switch {
 		case cfg.IsSet("logger"):
@@ -122,9 +122,9 @@ func NewLoggerFromConfig(cfg zen.Config) (*ZapLogger, error) {
 	return NewLoggerWithOptions(DefaultOptions())
 }
 
-// MustNewLoggerFromConfig builds a logger from config and panics on error.
+// New builds a logger from config and panics on error.
 func MustNewLoggerFromConfig(cfg zen.Config) *ZapLogger {
-	logger, err := NewLoggerFromConfig(cfg)
+	logger, err := New(cfg)
 	if err != nil {
 		panic(err)
 	}

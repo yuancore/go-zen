@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	if err := serve.RunCLI(); err != nil {
+	if err := serve.Run(); err != nil {
 		log.Fatalf("quickstart run failed: %v", err)
 	}
 }

@@ -1,4 +1,4 @@
-package gormadapter
+package zdb
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package ginadapter
+package zgin
 
 import (
 	"context"

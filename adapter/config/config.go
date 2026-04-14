@@ -1,4 +1,4 @@
-package viperadapter
+package config
 
 import (
 	"strings"
@@ -19,9 +19,9 @@ type ViperConfig struct {
 
 var _ zen.Config = (*ViperConfig)(nil)
 
-// NewConfig reads and merges one or more local config files.
+// New reads and merges one or more local config files.
 // Missing files are ignored so defaults and environment variables still work.
-func NewConfig(paths ...string) *ViperConfig {
+func New(paths ...string) *ViperConfig {
 	c := &ViperConfig{
 		v:         newBaseViper(),
 		overrides: make(map[string]any),

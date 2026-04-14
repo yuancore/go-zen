@@ -1,4 +1,4 @@
-package gormadapter
+package zdb
 
 import (
 	"github.com/yuancore/go-zen/zen"

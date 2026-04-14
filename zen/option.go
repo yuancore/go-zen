@@ -5,8 +5,8 @@ import "time"
 // Option configures App during construction via New().
 type Option func(*App)
 
-// Name sets the application name (used in logs and health checks).
-func Name(name string) Option {
+// WithName sets the application name (used in logs and health checks).
+func WithName(name string) Option {
 	return func(a *App) { a.name = name }
 }
 
@@ -26,17 +26,11 @@ func WithEngine(e Engine) Option {
 }
 
 // StopTimeout sets the graceful-shutdown deadline.
-func StopTimeout(d time.Duration) Option {
+func WithStopTimeout(d time.Duration) Option {
 	return func(a *App) { a.stopTimeout = d }
 }
 
 // Banner sets a custom startup banner. Pass empty string to disable.
 func Banner(b string) Option {
 	return func(a *App) { a.banner = &b }
-}
-
-// WithStopTimeout is an alias for StopTimeout (backward compat).
-// Deprecated: Use StopTimeout instead.
-func WithStopTimeout(d time.Duration) Option {
-	return StopTimeout(d)
 }

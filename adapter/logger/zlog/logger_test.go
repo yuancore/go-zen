@@ -1,4 +1,4 @@
-package zapadapter
+package zlog
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	viperadapter "github.com/yuancore/go-zen/adapter/config/viper"
+	viperadapter "github.com/yuancore/go-zen/adapter/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -88,8 +88,8 @@ output_paths = ["stdout"]
 		t.Fatalf("write config: %v", err)
 	}
 
-	cfg := viperadapter.NewConfig(configPath)
-	logger, err := NewLoggerFromConfig(cfg)
+	cfg := viperadapter.New(configPath)
+	logger, err := New(cfg)
 	if err != nil {
 		t.Fatalf("new logger from legacy config: %v", err)
 	}
@@ -112,8 +112,8 @@ output_paths = ["stdout"]
 		t.Fatalf("write config: %v", err)
 	}
 
-	cfg := viperadapter.NewConfig(configPath)
-	logger, err := NewLoggerFromConfig(cfg)
+	cfg := viperadapter.New(configPath)
+	logger, err := New(cfg)
 	if err != nil {
 		t.Fatalf("new logger with switch=false: %v", err)
 	}

@@ -10,9 +10,9 @@ import (
 	"github.com/yuancore/go-zen/zen"
 )
 
-// Register wires up all routes. It is called from serve.OnStart so that
+// Setup wires up all routes. It is called from serve.OnStart so that
 // the database component is already initialized in the container.
-func Register(app *zen.App) error {
+func Setup(app *zen.App) error {
 	if app == nil {
 		return fmt.Errorf("register routes: nil app")
 	}
@@ -32,11 +32,13 @@ func Register(app *zen.App) error {
 
 	// Orders CRUD
 	v1 := app.Group(routes.APIV1)
-	v1.GET(routes.Orders, ordersCtrl.Index)
-	v1.GET(routes.OrderByID, ordersCtrl.Show)
-	v1.POST(routes.Orders, ordersCtrl.Create)
-	v1.PUT(routes.OrderByID, ordersCtrl.Update)
-	v1.DELETE(routes.Orders, ordersCtrl.Delete)
+	{
+		v1.GET(routes.Orders, ordersCtrl.Index)
+		v1.GET(routes.OrderByID, ordersCtrl.Show)
+		v1.POST(routes.Orders, ordersCtrl.Create)
+		v1.PUT(routes.OrderByID, ordersCtrl.Update)
+		v1.DELETE(routes.Orders, ordersCtrl.Delete)
+	}
 
 	return nil
 }
