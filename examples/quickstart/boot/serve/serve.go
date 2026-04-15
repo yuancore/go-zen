@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yuancore/go-zen/adapter/db/zdb"
 	"github.com/yuancore/go-zen/adapter/http/zgin"
 	"github.com/yuancore/go-zen/adapter/logger/zlog"
 	"github.com/yuancore/go-zen/examples/quickstart/boot/router"
@@ -12,56 +13,74 @@ import (
 )
 
 // Run is the CLI entrypoint.
+// Flags:
+//
+//	-config-dir ./config       directory containing config.toml + env overlays (default)
+//	-config     ./config/x.toml  [legacy] explicit single-file path (overrides -config-dir)
 func Run() error {
-	configPath := flag.String("config", "./config/config_dev.toml", "configuration file path")
+	configDir := flag.String("config-dir", "./config", "directory containing config.toml and env overlays")
+	legacyPath := flag.String("config", "", "[legacy] explicit config file path (overrides -config-dir)")
 	flag.Parse()
-	return Start(*configPath)
+
+	if *legacyPath != "" {
+		return StartFromFile(*legacyPath)
+	}
+	return Start(*configDir)
 }
 
-// Start loads config and starts the application.
-func Start(configPath string) error {
-	app, err := NewApp(configPath)
+// Start loads env-based config from dir and starts the application.
+// APP_ENV selects the overlay: config.toml + config_{APP_ENV}.toml.
+func Start(configDir string) error {
+	cfg, err := loadEnvConfig(configDir)
 	if err != nil {
 		return err
 	}
-	return app.Run(listenAddr(app.Config()))
+	app, err := newApp(cfg)
+	if err != nil {
+		return err
+	}
+	return app.Run(listenAddr(cfg))
 }
 
-// NewApp constructs the application without starting it.
-// Component Init (including DB connections) happens inside app.Run().
+// StartFromFile loads a single explicit config file (legacy / CI usage).
+func StartFromFile(configPath string) error {
+	cfg, err := loadConfig(configPath)
+	if err != nil {
+		return err
+	}
+	app, err := newApp(cfg)
+	if err != nil {
+		return err
+	}
+	return app.Run(listenAddr(cfg))
+}
+
+// NewApp constructs the application without starting it (used by tests).
 func NewApp(configPath string) (*zen.App, error) {
 	cfg, err := loadConfig(configPath)
-
 	if err != nil {
 		return nil, err
 	}
+	return newApp(cfg)
+}
 
-	logger, err := zlog.New(cfg)
-
-	if err != nil {
-		return nil, err
-	}
-
+// newApp is the shared constructor used by all entry points.
+func newApp(cfg zen.Config) (*zen.App, error) {
 	app := zen.New(
 		zen.WithName(name(cfg)),
 		zen.WithConfig(cfg),
-		zen.WithLogger(logger),
-		zen.WithEngine(zgin.NewEngine(logger)),
+		zlog.Factory(), // builds ZapLogger from [log] config section
+		zgin.Factory(), // builds GinEngine using the constructed logger
 		zen.WithStopTimeout(10*time.Second),
 	)
 
-	// Register database component: reads [database] / [[connections]] from config.
-	// Init is deferred until app.Run() kicks off the component lifecycle.
+	// zdb.New() auto-reads [[connections]] from config and opens all DB connections.
+	app.Use(zdb.New())
 
-	if dbComponent, err := loadZdb(cfg); err != nil {
-		return nil, err
-	} else if dbComponent != nil {
-		app.Use(dbComponent)
-	}
-
-	// Register routes after all components have been initialized so the DB is
-	// already available in the container via gormadapter.DB(app, ctx).
+	// Pre-inject all DB connections into each request's context so service/DAO
+	// code can call zdb.DBCtx(app, ctx) or zdb.FromContext(ctx) without *App.
 	app.OnStart(func() error {
+		app.Middleware(zdb.InjectMiddleware(app))
 		return router.Setup(app)
 	})
 

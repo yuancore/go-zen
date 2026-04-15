@@ -34,3 +34,17 @@ func WithStopTimeout(d time.Duration) Option {
 func Banner(b string) Option {
 	return func(a *App) { a.banner = &b }
 }
+
+// WithLoggerFactory sets a lazy logger builder that runs after the Config is available.
+// It is called in init() before the engine is created.
+// WithLogger takes precedence if both are set.
+func WithLoggerFactory(fn func(Config) (Logger, error)) Option {
+	return func(a *App) { a.loggerFactory = fn }
+}
+
+// WithEngineFactory sets a lazy engine builder that runs after the Logger is available.
+// It is called in init() after the logger is ready.
+// WithEngine takes precedence if both are set.
+func WithEngineFactory(fn func(Logger) Engine) Option {
+	return func(a *App) { a.engineFactory = fn }
+}

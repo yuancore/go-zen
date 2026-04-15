@@ -4,12 +4,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	viperadapter "github.com/yuancore/go-zen/adapter/config/viper"
+	viperadapter "github.com/yuancore/go-zen/adapter/config"
 )
 
 func TestNormalizeLoggerPathsResolvesRelativeToConfigDir(t *testing.T) {
 	configDir := filepath.Join(t.TempDir(), "config")
-	cfg := viperadapter.NewConfig()
+	cfg := viperadapter.New()
 	cfg.Set("log", map[string]any{
 		"path":               "./log/app.log",
 		"output_paths":       []string{"stdout", "./log/access.log"},

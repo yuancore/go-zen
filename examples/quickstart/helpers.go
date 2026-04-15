@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	viperadapter "github.com/yuancore/go-zen/adapter/config/viper"
+	viperadapter "github.com/yuancore/go-zen/adapter/config"
 )
 
 // configBaseDir returns the project root directory inferred from the config

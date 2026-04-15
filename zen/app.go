@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -34,7 +35,12 @@ type App struct {
 	logger     Logger
 	ctr        *Container
 	components map[string]Component
-	order      []Component
+	order      []Component   // flattened init order, used for reverse shutdown
+	levels     [][]Component // grouped by depth for parallel init/start
+
+	// lazy factories — called in init() when the concrete impl is not directly provided
+	loggerFactory func(Config) (Logger, error)
+	engineFactory func(Logger) Engine
 
 	// hooks
 	onStart []func() error
@@ -71,14 +77,24 @@ func (a *App) init() {
 		a.cfg = &emptyConfig{}
 	}
 
-	// 2. Logger — use provided or fallback to std logger
+	// 2. Logger — use provided, or build lazily from factory, or fallback to std logger
+	if a.logger == nil && a.loggerFactory != nil {
+		l, err := a.loggerFactory(a.cfg)
+		if err != nil {
+			panic("zen: logger factory: " + err.Error())
+		}
+		a.logger = l
+	}
 	if a.logger == nil {
 		a.logger = newStdLogger()
 	}
 
-	// 3. Engine must be provided via WithEngine
+	// 3. Engine — use provided, or build lazily from factory
+	if a.engine == nil && a.engineFactory != nil {
+		a.engine = a.engineFactory(a.logger)
+	}
 	if a.engine == nil {
-		panic("zen: Engine is required — use zen.WithEngine() to provide one")
+		panic("zen: Engine is required — use zen.WithEngine() or zen.WithEngineFactory() to provide one")
 	}
 
 	// 4. Register self in container
@@ -213,9 +229,9 @@ func (a *App) GetLogger() Logger { return a.logger }
 
 // Run starts the application lifecycle:
 //  1. Print banner
-//  2. Resolve component dependency order (topological sort)
-//  3. Init all components in order
-//  4. Start all components in order
+//  2. Resolve component dependency order (topological sort by levels)
+//  3. Init all components (parallel within each level)
+//  4. Start all components (parallel within each level)
 //  5. Start HTTP server via Engine
 //  6. Wait for signal (SIGINT/SIGTERM)
 //  7. Graceful shutdown (stop components in reverse order, then stop server)
@@ -223,30 +239,34 @@ func (a *App) Run(addr string) error {
 	// Banner
 	a.printBanner()
 
-	// Topo sort components
-	order, err := topoSort(a.components)
+	// Topo sort into levels for parallel init/start
+	levels, err := topoLevels(a.components)
 	if err != nil {
 		return fmt.Errorf("zen: %w", err)
 	}
-	a.order = order
+	a.levels = levels
 
-	if len(order) > 0 {
-		a.logger.Info("zen: components resolved", "order", componentNames(order))
+	// Flatten levels into a.order for reverse-order shutdown
+	a.order = make([]Component, 0, len(a.components))
+	for _, level := range levels {
+		a.order = append(a.order, level...)
 	}
 
-	// Init phase
-	for _, c := range order {
-		a.logger.Info("zen: init", "component", c.Name())
-		if err := c.Init(a); err != nil {
-			return fmt.Errorf("zen: component %q init: %w", c.Name(), err)
+	if len(a.order) > 0 {
+		a.logger.Info("zen: components resolved", "order", componentNames(a.order))
+	}
+
+	// Init phase — parallel within each level
+	for _, level := range levels {
+		if err := a.initLevel(level); err != nil {
+			return err
 		}
 	}
 
-	// Start phase
-	for _, c := range order {
-		a.logger.Info("zen: start", "component", c.Name())
-		if err := c.Start(); err != nil {
-			return fmt.Errorf("zen: component %q start: %w", c.Name(), err)
+	// Start phase — parallel within each level
+	for _, level := range levels {
+		if err := a.startLevel(level); err != nil {
+			return err
 		}
 	}
 
@@ -338,4 +358,65 @@ func (a *App) printBanner() {
 	}
 	fmt.Printf(defaultBanner, version)
 	fmt.Printf("  Go: %s | PID: %d\n\n", runtime.Version(), os.Getpid())
+}
+
+// ---------- Parallel helpers ----------
+
+// initLevel initializes all components in a level concurrently.
+// Components at the same level have no inter-dependencies, so parallel execution is safe.
+func (a *App) initLevel(level []Component) error {
+	if len(level) == 1 {
+		c := level[0]
+		a.logger.Info("zen: init", "component", c.Name())
+		if err := c.Init(a); err != nil {
+			return fmt.Errorf("zen: component %q init: %w", c.Name(), err)
+		}
+		return nil
+	}
+	a.logger.Info("zen: init level", "components", componentNames(level))
+	errs := make([]error, len(level))
+	var wg sync.WaitGroup
+	for i, c := range level {
+		wg.Add(1)
+		go func(i int, c Component) {
+			defer wg.Done()
+			errs[i] = c.Init(a)
+		}(i, c)
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			return fmt.Errorf("zen: component %q init: %w", level[i].Name(), err)
+		}
+	}
+	return nil
+}
+
+// startLevel starts all components in a level concurrently.
+func (a *App) startLevel(level []Component) error {
+	if len(level) == 1 {
+		c := level[0]
+		a.logger.Info("zen: start", "component", c.Name())
+		if err := c.Start(); err != nil {
+			return fmt.Errorf("zen: component %q start: %w", c.Name(), err)
+		}
+		return nil
+	}
+	a.logger.Info("zen: start level", "components", componentNames(level))
+	errs := make([]error, len(level))
+	var wg sync.WaitGroup
+	for i, c := range level {
+		wg.Add(1)
+		go func(i int, c Component) {
+			defer wg.Done()
+			errs[i] = c.Start()
+		}(i, c)
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			return fmt.Errorf("zen: component %q start: %w", level[i].Name(), err)
+		}
+	}
+	return nil
 }

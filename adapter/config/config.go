@@ -1,6 +1,9 @@
 package config
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -172,3 +175,63 @@ func (c *ViperConfig) Unmarshal(key string, v any) error {
 
 // Raw returns the underlying *viper.Viper for advanced use.
 func (c *ViperConfig) Raw() *viper.Viper { return c.v }
+
+// ---------- Environment-based loading ----------
+
+// DefaultEnvVar is the environment variable used to select the active environment.
+const DefaultEnvVar = "APP_ENV"
+
+// NewEnv loads config using environment-based file merging.
+//
+// It reads the APP_ENV environment variable (default "dev") and loads:
+//
+//	{dir}/config.toml          ← base (shared settings)
+//	{dir}/config_{env}.toml    ← env overlay (overrides base)
+//
+// Example:
+//
+//	cfg := config.NewEnv("./config")
+//	// APP_ENV=prod  →  loads config.toml + config_prod.toml
+//	// APP_ENV=      →  loads config.toml + config_dev.toml  (default)
+func NewEnv(dir string) *ViperConfig {
+	return NewEnvVar(dir, DefaultEnvVar, "dev")
+}
+
+// NewEnvVar is like NewEnv but uses a custom env variable name and default environment name.
+//
+//	cfg := config.NewEnvVar("./config", "GO_ENV", "dev")
+func NewEnvVar(dir, envVar, defaultEnv string) *ViperConfig {
+	env := strings.TrimSpace(os.Getenv(envVar))
+	if env == "" {
+		env = defaultEnv
+	}
+
+	base := filepath.Join(dir, "config.toml")
+	overlay := filepath.Join(dir, fmt.Sprintf("config_%s.toml", env))
+
+	c := &ViperConfig{
+		v:         newBaseViper(),
+		overrides: make(map[string]any),
+	}
+	// base config is required; overlay is optional (ignored if missing)
+	_ = c.Load(base)
+	if _, err := os.Stat(overlay); err == nil {
+		_ = c.Load(overlay)
+	}
+	return c
+}
+
+// Factory returns a zen.Option that builds a ViperConfig from explicit file paths.
+//
+//	app := zen.New(config.Factory("./config/config.toml"), ...)
+func Factory(paths ...string) zen.Option {
+	return zen.WithConfig(New(paths...))
+}
+
+// EnvFactory returns a zen.Option that builds a ViperConfig via environment-based loading.
+// The active environment is read from APP_ENV (default "dev").
+//
+//	app := zen.New(config.EnvFactory("./config"), zlog.Factory(), zgin.Factory())
+func EnvFactory(dir string) zen.Option {
+	return zen.WithConfig(NewEnv(dir))
+}

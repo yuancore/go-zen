@@ -1,9 +1,18 @@
 package zdb
 
 import (
+	"context"
+
 	"github.com/yuancore/go-zen/zen"
 	"gorm.io/gorm"
 )
+
+// ---------- Context key types ----------
+
+type dbContextKey struct{}
+type namedDBContextKey struct{ name string }
+
+// ---------- HTTP-request-aware helpers (zen.Context) ----------
 
 // Scope resolves request-aware database handles for the current HTTP handler.
 type Scope struct {
@@ -36,10 +45,7 @@ func TableOn(app *zen.App, ctx zen.Context, connectionName, tableName string) *g
 // For returns a scope that automatically binds the current HTTP request context
 // to resolved GORM connections.
 func For(app *zen.App, ctx zen.Context) Scope {
-	return Scope{
-		app: app,
-		ctx: ctx,
-	}
+	return Scope{app: app, ctx: ctx}
 }
 
 // Default returns the default database bound to the current request context.
@@ -49,9 +55,7 @@ func (s Scope) Default() *gorm.DB {
 }
 
 // DB is an alias of Default.
-func (s Scope) DB() *gorm.DB {
-	return s.Default()
-}
+func (s Scope) DB() *gorm.DB { return s.Default() }
 
 // Named returns a named database bound to the current request context.
 // It panics if the named database service is not registered.
@@ -60,14 +64,10 @@ func (s Scope) Named(name string) *gorm.DB {
 }
 
 // Connection is a Laravel-style alias of Named.
-func (s Scope) Connection(name string) *gorm.DB {
-	return s.Named(name)
-}
+func (s Scope) Connection(name string) *gorm.DB { return s.Named(name) }
 
 // Table returns a table-scoped query on the default database.
-func (s Scope) Table(name string) *gorm.DB {
-	return s.Default().Table(name)
-}
+func (s Scope) Table(name string) *gorm.DB { return s.Default().Table(name) }
 
 // TableOn returns a table-scoped query on the named database.
 func (s Scope) TableOn(connectionName, tableName string) *gorm.DB {
@@ -104,4 +104,90 @@ func WithRequest(db *gorm.DB, ctx zen.Context) *gorm.DB {
 		return db
 	}
 	return db.WithContext(ctx.Request().Context())
+}
+
+// ---------- Standard context.Context helpers ----------
+// Use these in service / DAO layers that receive a plain context.Context
+// (background jobs, gRPC handlers, CLI commands, etc.)
+
+// DBCtx returns the default *gorm.DB with ctx attached.
+// Falls back to the app-registered default DB when no DB is found in ctx.
+func DBCtx(app *zen.App, ctx context.Context) *gorm.DB {
+	if db, ok := FromContext(ctx); ok {
+		return db.WithContext(ctx)
+	}
+	return MustResolve(app).WithContext(ctx)
+}
+
+// NamedCtx returns a named *gorm.DB with ctx attached.
+func NamedCtx(app *zen.App, ctx context.Context, name string) *gorm.DB {
+	if db, ok := NamedFromContext(ctx, name); ok {
+		return db.WithContext(ctx)
+	}
+	return MustResolveNamed(app, name).WithContext(ctx)
+}
+
+// ---------- context.Context injection / extraction ----------
+
+// InjectDB stores the default *gorm.DB in a context so downstream code can
+// retrieve it without holding an *App reference.
+//
+//	ctx = zdb.InjectDB(ctx, db)
+func InjectDB(ctx context.Context, db *gorm.DB) context.Context {
+	return context.WithValue(ctx, dbContextKey{}, db)
+}
+
+// InjectNamedDB stores a named *gorm.DB in a context.
+//
+//	ctx = zdb.InjectNamedDB(ctx, "orders_db", db)
+func InjectNamedDB(ctx context.Context, name string, db *gorm.DB) context.Context {
+	return context.WithValue(ctx, namedDBContextKey{name}, db)
+}
+
+// FromContext retrieves the default *gorm.DB previously stored via InjectDB.
+func FromContext(ctx context.Context) (*gorm.DB, bool) {
+	db, ok := ctx.Value(dbContextKey{}).(*gorm.DB)
+	return db, ok && db != nil
+}
+
+// NamedFromContext retrieves a named *gorm.DB previously stored via InjectNamedDB.
+func NamedFromContext(ctx context.Context, name string) (*gorm.DB, bool) {
+	db, ok := ctx.Value(namedDBContextKey{name}).(*gorm.DB)
+	return db, ok && db != nil
+}
+
+// ---------- Middleware helper ----------
+
+// InjectMiddleware returns a zen.Handler middleware that pre-injects all registered
+// database connections into every request's context.
+// This lets service/DAO code call zdb.DBCtx(app, ctx.Request().Context()) or
+// zdb.FromContext(ctx.Request().Context()) without needing *zen.App references.
+//
+//	app.Middleware(zdb.InjectMiddleware(app))
+func InjectMiddleware(app *zen.App) zen.Handler {
+	return func(c zen.Context) {
+		manager, ok := ResolveManager(app)
+		if !ok {
+			c.Next()
+			return
+		}
+
+		req := c.Request()
+		ctx := req.Context()
+
+		// inject default DB
+		if def := manager.MustDefault(); def != nil {
+			ctx = InjectDB(ctx, def)
+		}
+
+		// inject each named DB
+		for _, name := range manager.Names() {
+			db := manager.MustGet(name)
+			ctx = InjectNamedDB(ctx, name, db)
+		}
+
+		// update request with enriched context
+		*req = *req.WithContext(ctx)
+		c.Next()
+	}
 }

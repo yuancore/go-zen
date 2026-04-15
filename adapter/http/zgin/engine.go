@@ -437,3 +437,17 @@ func normalizeServerOptions(options ServerOptions) ServerOptions {
 
 	return options
 }
+
+// Factory returns a zen.Option that lazily builds a GinEngine using the app logger.
+// Use this with zen.New() instead of calling NewEngine manually:
+//
+//	app := zen.New(
+//	    zen.WithConfig(cfg),
+//	    zlog.Factory(),
+//	    zgin.Factory(),
+//	)
+func Factory() zen.Option {
+	return zen.WithEngineFactory(func(logger zen.Logger) zen.Engine {
+		return NewEngine(logger)
+	})
+}

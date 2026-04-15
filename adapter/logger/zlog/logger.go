@@ -122,6 +122,21 @@ func New(cfg zen.Config) (*ZapLogger, error) {
 	return NewLoggerWithOptions(DefaultOptions())
 }
 
+// Factory returns a zen.Option that lazily builds a ZapLogger from the app config.
+// The logger config is read from "logger" or "log" config keys.
+// Use this with zen.New() instead of creating the logger manually:
+//
+//	app := zen.New(
+//	    zen.WithConfig(cfg),
+//	    zlog.Factory(),
+//	    ...
+//	)
+func Factory() zen.Option {
+	return zen.WithLoggerFactory(func(cfg zen.Config) (zen.Logger, error) {
+		return New(cfg)
+	})
+}
+
 // New builds a logger from config and panics on error.
 func MustNewLoggerFromConfig(cfg zen.Config) *ZapLogger {
 	logger, err := New(cfg)
