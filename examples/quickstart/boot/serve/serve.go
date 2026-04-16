@@ -69,8 +69,8 @@ func newApp(cfg zen.Config) (*zen.App, error) {
 	app := zen.New(
 		zen.WithName(name(cfg)),
 		zen.WithConfig(cfg),
-		zlog.Factory(), // builds ZapLogger from [log] config section
-		zgin.Factory(), // builds GinEngine using the constructed logger
+		zlog.Factory(),              // builds ZapLogger from [log] config section
+		zgin.FactoryFromConfig(cfg), // builds GinEngine; access log driven by [http_log]
 		zen.WithStopTimeout(10*time.Second),
 	)
 

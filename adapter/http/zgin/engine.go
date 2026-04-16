@@ -2,15 +2,15 @@ package zgin
 
 import (
 	"context"
+	"io"
+	"io/fs"
 	"mime/multipart"
 	"net/http"
-	"runtime/debug"
-	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/yuancore/go-zen/zen"
 )
 
@@ -68,8 +68,8 @@ func (g *ginContext) FormFile(name string) (*multipart.FileHeader, error) {
 	return g.c.FormFile(name)
 }
 func (g *ginContext) MultipartForm() (*multipart.Form, error) { return g.c.MultipartForm() }
-func (g *ginContext) SaveUploadedFile(file *multipart.FileHeader, dst string) error {
-	return g.c.SaveUploadedFile(file, dst)
+func (g *ginContext) SaveUploadedFile(file *multipart.FileHeader, dst string, perm ...fs.FileMode) error {
+	return g.c.SaveUploadedFile(file, dst, perm...)
 }
 
 // --- Cookie ---
@@ -126,6 +126,98 @@ func (g *ginContext) IsAborted() bool                     { return g.c.IsAborted
 // Raw returns the underlying *gin.Context for advanced use.
 func (g *ginContext) Raw() *gin.Context { return g.c }
 
+// --- context.Context (allows zen.Context to be passed to context-aware functions) ---
+func (g *ginContext) Deadline() (time.Time, bool) { return g.c.Deadline() }
+func (g *ginContext) Done() <-chan struct{}       { return g.c.Done() }
+func (g *ginContext) Err() error                  { return g.c.Err() }
+func (g *ginContext) Value(key any) any           { return g.c.Value(key) }
+
+// --- URL params ---
+func (g *ginContext) AddParam(key, value string) { g.c.AddParam(key, value) }
+
+// --- Query string ---
+func (g *ginContext) GetQueryArray(key string) ([]string, bool)        { return g.c.GetQueryArray(key) }
+func (g *ginContext) GetQueryMap(key string) (map[string]string, bool) { return g.c.GetQueryMap(key) }
+
+// --- Request info ---
+func (g *ginContext) RemoteIP() string       { return g.c.RemoteIP() }
+func (g *ginContext) HandlerName() string    { return g.c.HandlerName() }
+func (g *ginContext) HandlerNames() []string { return g.c.HandlerNames() }
+
+// --- Bind ---
+func (g *ginContext) BindXML(v any) error   { return g.c.BindXML(v) }
+func (g *ginContext) BindYAML(v any) error  { return g.c.BindYAML(v) }
+func (g *ginContext) BindTOML(v any) error  { return g.c.BindTOML(v) }
+func (g *ginContext) BindPlain(v any) error { return g.c.BindPlain(v) }
+
+// --- ShouldBind ---
+func (g *ginContext) ShouldBindXML(v any) error           { return g.c.ShouldBindXML(v) }
+func (g *ginContext) ShouldBindYAML(v any) error          { return g.c.ShouldBindYAML(v) }
+func (g *ginContext) ShouldBindTOML(v any) error          { return g.c.ShouldBindTOML(v) }
+func (g *ginContext) ShouldBindPlain(v any) error         { return g.c.ShouldBindPlain(v) }
+func (g *ginContext) ShouldBindBodyWithJSON(v any) error  { return g.c.ShouldBindBodyWithJSON(v) }
+func (g *ginContext) ShouldBindBodyWithXML(v any) error   { return g.c.ShouldBindBodyWithXML(v) }
+func (g *ginContext) ShouldBindBodyWithYAML(v any) error  { return g.c.ShouldBindBodyWithYAML(v) }
+func (g *ginContext) ShouldBindBodyWithTOML(v any) error  { return g.c.ShouldBindBodyWithTOML(v) }
+func (g *ginContext) ShouldBindBodyWithPlain(v any) error { return g.c.ShouldBindBodyWithPlain(v) }
+
+// --- Form ---
+func (g *ginContext) GetPostFormArray(key string) ([]string, bool) {
+	return g.c.GetPostFormArray(key)
+}
+func (g *ginContext) GetPostFormMap(key string) (map[string]string, bool) {
+	return g.c.GetPostFormMap(key)
+}
+
+// --- Cookie ---
+func (g *ginContext) SetCookieData(cookie *http.Cookie) { g.c.SetCookieData(cookie) }
+
+// --- Response: additional formats ---
+func (g *ginContext) HTML(code int, name string, obj any) { g.c.HTML(code, name, obj) }
+func (g *ginContext) TOML(code int, obj any)              { g.c.TOML(code, obj) }
+func (g *ginContext) ProtoBuf(code int, obj any)          { g.c.ProtoBuf(code, obj) }
+func (g *ginContext) BSON(code int, obj any)              { g.c.BSON(code, obj) }
+func (g *ginContext) DataFromReader(code int, contentLength int64, contentType string, reader io.Reader, extraHeaders map[string]string) {
+	g.c.DataFromReader(code, contentLength, contentType, reader, extraHeaders)
+}
+func (g *ginContext) File(filepath string)                           { g.c.File(filepath) }
+func (g *ginContext) FileFromFS(filepath string, fs http.FileSystem) { g.c.FileFromFS(filepath, fs) }
+func (g *ginContext) FileAttachment(filepath, filename string) {
+	g.c.FileAttachment(filepath, filename)
+}
+func (g *ginContext) SSEvent(name string, message any)        { g.c.SSEvent(name, message) }
+func (g *ginContext) Stream(step func(w io.Writer) bool) bool { return g.c.Stream(step) }
+func (g *ginContext) NegotiateFormat(offered ...string) string {
+	return g.c.NegotiateFormat(offered...)
+}
+func (g *ginContext) SetAccepted(formats ...string) { g.c.SetAccepted(formats...) }
+
+// --- Context store: additional types ---
+func (g *ginContext) Delete(key string)                    { g.c.Delete(key) }
+func (g *ginContext) GetInt8(key string) int8              { return g.c.GetInt8(key) }
+func (g *ginContext) GetInt16(key string) int16            { return g.c.GetInt16(key) }
+func (g *ginContext) GetInt32(key string) int32            { return g.c.GetInt32(key) }
+func (g *ginContext) GetUint(key string) uint              { return g.c.GetUint(key) }
+func (g *ginContext) GetUint8(key string) uint8            { return g.c.GetUint8(key) }
+func (g *ginContext) GetUint16(key string) uint16          { return g.c.GetUint16(key) }
+func (g *ginContext) GetUint32(key string) uint32          { return g.c.GetUint32(key) }
+func (g *ginContext) GetUint64(key string) uint64          { return g.c.GetUint64(key) }
+func (g *ginContext) GetFloat32(key string) float32        { return g.c.GetFloat32(key) }
+func (g *ginContext) GetTime(key string) time.Time         { return g.c.GetTime(key) }
+func (g *ginContext) GetDuration(key string) time.Duration { return g.c.GetDuration(key) }
+func (g *ginContext) GetStringMapStringSlice(key string) map[string][]string {
+	return g.c.GetStringMapStringSlice(key)
+}
+
+// --- Error tracking ---
+func (g *ginContext) AddError(err error)                 { _ = g.c.Error(err) }
+func (g *ginContext) AbortWithError(code int, err error) { _ = g.c.AbortWithError(code, err) }
+
+// --- Abort variants ---
+func (g *ginContext) AbortWithStatusPureJSON(code int, obj any) {
+	g.c.AbortWithStatusPureJSON(code, obj)
+}
+
 // ---------- wrapHandler helpers ----------
 
 func wrapHandler(h zen.Handler) gin.HandlerFunc {
@@ -140,6 +232,19 @@ func wrapHandlers(hs []zen.Handler) []gin.HandlerFunc {
 		out[i] = wrapHandler(h)
 	}
 	return out
+}
+
+// GinContext returns the underlying *gin.Context from a zen.Context.
+// Use this for gin-specific features not exposed by the zen.Context interface:
+// Negotiate, Render, ShouldBindWith, MustBindWith, Handler(), Copy(), etc.
+//
+//	gc := zgin.GinContext(c)
+//	gc.Negotiate(200, gin.Negotiate{Offered: []string{"application/json"}, Data: resp})
+func GinContext(c zen.Context) *gin.Context {
+	if gc, ok := c.(*ginContext); ok {
+		return gc.c
+	}
+	return nil
 }
 
 // ---------- GinEngine ----------
@@ -162,8 +267,6 @@ const (
 	traceIDKey      = "trace_id"
 	spanIDKey       = "span_id"
 )
-
-var requestSequence atomic.Uint64
 
 type discardLogger struct{}
 
@@ -212,7 +315,7 @@ func NewEngineWithOptions(logger zen.Logger, options ServerOptions) *GinEngine {
 		logger:        logger,
 		serverOptions: normalizeServerOptions(options),
 	}
-	g.Use(engine.requestContextMiddleware(), engine.accessLogMiddleware(), engine.recoveryMiddleware())
+	g.Use(engine.requestContextMiddleware(), engine.accessLogMiddleware(), NewRecovery(engine.logger))
 	return engine
 }
 
@@ -386,21 +489,6 @@ func (e *GinEngine) accessLogMiddleware() gin.HandlerFunc {
 	}
 }
 
-func (e *GinEngine) recoveryMiddleware() gin.HandlerFunc {
-	return gin.CustomRecovery(func(c *gin.Context, recovered any) {
-		e.logger.Error(
-			"http panic recovered",
-			requestIDKey, requestIDFromContext(c),
-			"method", c.Request.Method,
-			"path", c.Request.URL.Path,
-			"client_ip", c.ClientIP(),
-			"panic", recovered,
-			"stack", string(debug.Stack()),
-		)
-		c.AbortWithStatus(http.StatusInternalServerError)
-	})
-}
-
 func requestIDFromContext(c *gin.Context) string {
 	if value, exists := c.Get(requestIDKey); exists {
 		if requestID, ok := value.(string); ok && requestID != "" {
@@ -411,9 +499,7 @@ func requestIDFromContext(c *gin.Context) string {
 }
 
 func nextRequestID() string {
-	now := strconv.FormatInt(time.Now().UnixNano(), 36)
-	seq := strconv.FormatUint(requestSequence.Add(1), 36)
-	return now + "-" + seq
+	return uuid.New().String()
 }
 
 func normalizeServerOptions(options ServerOptions) ServerOptions {
@@ -438,6 +524,36 @@ func normalizeServerOptions(options ServerOptions) ServerOptions {
 	return options
 }
 
+// NewEngineFromConfig creates a GinEngine whose access log middleware is driven by
+// the [http_log] config section instead of the built-in static logger.
+// When http_log.enabled is false (or the section is absent) the engine falls back to
+// the default accessLogMiddleware so that requests are still always logged.
+func NewEngineFromConfig(logger zen.Logger, cfg zen.Config) *GinEngine {
+	return NewEngineFromConfigWithOptions(logger, cfg, DefaultServerOptions())
+}
+
+// NewEngineFromConfigWithOptions is like NewEngineFromConfig but accepts explicit server timeouts.
+func NewEngineFromConfigWithOptions(logger zen.Logger, cfg zen.Config, options ServerOptions) *GinEngine {
+	gin.SetMode(gin.ReleaseMode)
+	g := gin.New()
+	if logger == nil {
+		logger = discardLogger{}
+	}
+	_ = g.SetTrustedProxies(nil)
+	engine := &GinEngine{
+		engine:        g,
+		logger:        logger,
+		serverOptions: normalizeServerOptions(options),
+	}
+	accessLog := NewLoggerFromConfig(cfg, logger)
+	if accessLog == nil {
+		// http_log disabled — use lightweight built-in logger so nothing is lost
+		accessLog = engine.accessLogMiddleware()
+	}
+	g.Use(engine.requestContextMiddleware(), accessLog, NewRecovery(engine.logger))
+	return engine
+}
+
 // Factory returns a zen.Option that lazily builds a GinEngine using the app logger.
 // Use this with zen.New() instead of calling NewEngine manually:
 //
@@ -449,5 +565,21 @@ func normalizeServerOptions(options ServerOptions) ServerOptions {
 func Factory() zen.Option {
 	return zen.WithEngineFactory(func(logger zen.Logger) zen.Engine {
 		return NewEngine(logger)
+	})
+}
+
+// FactoryFromConfig returns a zen.Option that lazily builds a GinEngine with access
+// logging configured from the [http_log] config section.
+// Use this instead of Factory() when you want config-driven request logging:
+//
+//	cfg, _ := loadConfig(path)
+//	app := zen.New(
+//	    zen.WithConfig(cfg),
+//	    zlog.Factory(),
+//	    zgin.FactoryFromConfig(cfg),
+//	)
+func FactoryFromConfig(cfg zen.Config) zen.Option {
+	return zen.WithEngineFactory(func(logger zen.Logger) zen.Engine {
+		return NewEngineFromConfig(logger, cfg)
 	})
 }

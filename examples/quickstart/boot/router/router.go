@@ -3,9 +3,7 @@ package router
 import (
 	"fmt"
 
-	httpapp "github.com/yuancore/go-zen/examples/quickstart/app/http"
 	"github.com/yuancore/go-zen/examples/quickstart/app/http/api"
-	"github.com/yuancore/go-zen/examples/quickstart/app/http/middleware"
 	"github.com/yuancore/go-zen/examples/quickstart/routes"
 	"github.com/yuancore/go-zen/zen"
 )
@@ -18,10 +16,7 @@ func Setup(app *zen.App) error {
 	}
 
 	// Global middleware
-	app.Middleware(
-		middleware.SecurityHeaders(),
-		middleware.MaxBodyBytes(httpapp.RequestBodyLimitBytes(app.Config())),
-	)
+	app.Middleware()
 
 	// Controllers — db is resolved lazily per-request via gormadapter.DB(app, ctx)
 	sysCtrl := api.NewSystemController()

@@ -479,14 +479,32 @@ func newEncoderConfig(console bool) zapcore.EncoderConfig {
 }
 
 func resolveOutputPaths(opts Options) []string {
-	paths := trimPaths(opts.OutputPaths)
-	filePath := strings.TrimSpace(firstNonEmpty(opts.FilePath, opts.Path))
-	if filePath != "" && !containsPath(paths, filePath) {
-		paths = append(paths, filePath)
+	var paths []string
+
+	// Add only non-stdio entries from output_paths.
+	// Stdout / stderr are controlled exclusively by the Console flag below.
+	for _, p := range trimPaths(opts.OutputPaths) {
+		switch strings.ToLower(p) {
+		case "stdout", "stderr":
+			// skip — handled by Console flag
+		default:
+			paths = append(paths, p)
+		}
 	}
-	if opts.Console && !containsStdIO(paths) {
+
+	// Add primary log file (path / file_path config keys).
+	if fp := strings.TrimSpace(firstNonEmpty(opts.FilePath, opts.Path)); fp != "" {
+		if !containsPath(paths, fp) {
+			paths = append(paths, fp)
+		}
+	}
+
+	// Console flag is the single source of truth for stdout.
+	if opts.Console {
 		paths = append(paths, "stdout")
 	}
+
+	// Safety fallback: at least one sink must exist.
 	if len(paths) == 0 {
 		return []string{"stdout"}
 	}
