@@ -19,7 +19,7 @@ import (
 //	-config-dir ./config       directory containing config.toml + env overlays (default)
 //	-config     ./config/x.toml  [legacy] explicit single-file path (overrides -config-dir)
 func Run() error {
-	configDir := flag.String("config-dir", "./config", "directory containing config.toml and env overlays")
+	configDir := flag.String("config-dir", "./config", "directory containing config.toml and env overlays (e.g. ./config)")
 	legacyPath := flag.String("config", "", "[legacy] explicit config file path (overrides -config-dir)")
 	flag.Parse()
 

@@ -58,7 +58,7 @@ name = "mysql"
 type = "mysql"
 #服务器地址
 #服务器地址
-hostname = "127.0.0.1"
+hostname = "127.0.0.12"
 #服务器端口
 port = 3306
 #数据库用户名

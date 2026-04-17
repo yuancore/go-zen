@@ -275,15 +275,16 @@ func (a *App) Run(addr string) error {
 	}
 
 	// Init phase — parallel within each level.
-	// On failure, stop any components that were already initialised so
-	// connections/goroutines are not leaked (all Stop() impls guard with nil
-	// checks, so calling them on partially-initialised components is safe).
+	// On failure: log the error via the structured logger (so it appears in the
+	// log file), clean up any already-initialised components, then call Fatal
+	// which flushes ZAP buffers before calling os.Exit(1).
 	for _, level := range levels {
 		if err := a.initLevel(level); err != nil {
 			stopCtx, stopCancel := context.WithTimeout(context.Background(), a.stopTimeout)
 			_ = a.stopComponents(stopCtx, a.order)
 			stopCancel()
-			return err
+			a.logger.Fatal("zen: startup failed — check your config and service availability", "err", err)
+			return err // unreachable: Fatal calls os.Exit(1)
 		}
 	}
 
@@ -293,7 +294,8 @@ func (a *App) Run(addr string) error {
 			stopCtx, stopCancel := context.WithTimeout(context.Background(), a.stopTimeout)
 			_ = a.stopComponents(stopCtx, a.order)
 			stopCancel()
-			return err
+			a.logger.Fatal("zen: startup failed", "err", err)
+			return err // unreachable: Fatal calls os.Exit(1)
 		}
 	}
 
@@ -413,6 +415,7 @@ func (a *App) initLevel(level []Component) error {
 		c := level[0]
 		a.logger.Info("zen: init", "component", c.Name())
 		if err := c.Init(a); err != nil {
+			a.logger.Error("zen: component init failed", "component", c.Name(), "err", err)
 			return fmt.Errorf("zen: component %q init: %w", c.Name(), err)
 		}
 		return nil
@@ -430,6 +433,7 @@ func (a *App) initLevel(level []Component) error {
 	wg.Wait()
 	for i, err := range errs {
 		if err != nil {
+			a.logger.Error("zen: component init failed", "component", level[i].Name(), "err", err)
 			return fmt.Errorf("zen: component %q init: %w", level[i].Name(), err)
 		}
 	}
@@ -442,6 +446,7 @@ func (a *App) startLevel(level []Component) error {
 		c := level[0]
 		a.logger.Info("zen: start", "component", c.Name())
 		if err := c.Start(); err != nil {
+			a.logger.Error("zen: component start failed", "component", c.Name(), "err", err)
 			return fmt.Errorf("zen: component %q start: %w", c.Name(), err)
 		}
 		return nil

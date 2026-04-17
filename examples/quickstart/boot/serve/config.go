@@ -2,7 +2,6 @@ package serve
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/yuancore/go-zen/adapter/config"
 	"github.com/yuancore/go-zen/zen"
@@ -22,13 +21,16 @@ func loadConfig(path string) (zen.Config, error) {
 // It reads APP_ENV (default "dev") and merges:
 //
 //	{dir}/config.toml           ← shared base
-//	{dir}/config_{APP_ENV}.toml ← env overlay
+//	{dir}/config_{APP_ENV}.toml ← env overlay (optional)
+//
+// Returns an error if the base config.toml cannot be read, so misconfigured
+// paths fail loudly at startup instead of running with empty configuration.
 func loadEnvConfig(dir string) (zen.Config, error) {
-	basePath := filepath.Join(dir, "config.toml")
 	cfg := config.NewEnv(dir)
 	if !cfg.IsSet("system") {
-		// try the plain config path as a safety fallback
-		_ = cfg.Load(basePath)
+		return nil, fmt.Errorf(
+			"load config: no [system] section found after loading %s/config.toml — "+
+				"check that the directory exists and contains a valid config.toml", dir)
 	}
 	return cfg, nil
 }
