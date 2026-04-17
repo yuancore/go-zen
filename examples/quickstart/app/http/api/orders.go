@@ -1,7 +1,6 @@
 package api
 
 import (
-	"github.com/yuancore/go-zen/adapter/db/zdb"
 	"github.com/yuancore/go-zen/examples/quickstart/app/entity/request"
 	"github.com/yuancore/go-zen/examples/quickstart/app/entity/vo"
 	"github.com/yuancore/go-zen/examples/quickstart/app/service"
@@ -10,16 +9,14 @@ import (
 )
 
 // OrdersController handles HTTP requests for the orders resource.
+// It holds no *App reference — all dependencies are propagated via zen.Context.
 type OrdersController struct {
 	vo.Base
-	app *zen.App
 }
 
-// NewOrdersController creates a controller bound to the application.
-// The app reference is used to resolve the database on each request,
-// automatically attaching the request context for tracing and cancellation.
-func NewOrdersController(app *zen.App) *OrdersController {
-	return &OrdersController{app: app}
+// NewOrdersController creates a controller. No app injection required.
+func NewOrdersController() *OrdersController {
+	return &OrdersController{}
 }
 
 // @Tags 订单
@@ -36,7 +33,7 @@ func (ctrl *OrdersController) Index(c zen.Context) {
 		return
 	}
 
-	list, total, err := service.NewOrdersService(zdb.DB(ctrl.app, c)).Index(req)
+	list, total, err := service.NewOrdersService(c).Index(req)
 	if err != nil {
 		ctrl.Fail(c, vo.FAILED, err)
 		return
@@ -58,7 +55,7 @@ func (ctrl *OrdersController) Show(c zen.Context) {
 		return
 	}
 
-	result, err := service.NewOrdersService(zdb.DB(ctrl.app, c)).Show(req)
+	result, err := service.NewOrdersService(c).Show(req)
 	if err != nil {
 		ctrl.Fail(c, vo.FAILED, err)
 		return
@@ -80,7 +77,7 @@ func (ctrl *OrdersController) Create(c zen.Context) {
 		return
 	}
 
-	if err := service.NewOrdersService(zdb.DB(ctrl.app, c)).Store(req); err != nil {
+	if err := service.NewOrdersService(c).Store(req); err != nil {
 		ctrl.Fail(c, vo.CREATION_FAILED, err)
 		return
 	}
@@ -102,7 +99,7 @@ func (ctrl *OrdersController) Update(c zen.Context) {
 		return
 	}
 
-	if err := service.NewOrdersService(zdb.DB(ctrl.app, c)).Update(req); err != nil {
+	if err := service.NewOrdersService(c).Update(req); err != nil {
 		ctrl.Fail(c, vo.UPDATE_FAILED, err)
 		return
 	}
@@ -123,7 +120,7 @@ func (ctrl *OrdersController) Delete(c zen.Context) {
 		return
 	}
 
-	if err := service.NewOrdersService(zdb.DB(ctrl.app, c)).Deletes(req); err != nil {
+	if err := service.NewOrdersService(c).Deletes(req); err != nil {
 		ctrl.Fail(c, vo.DELETE_FAILED, err)
 		return
 	}

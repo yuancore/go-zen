@@ -110,17 +110,46 @@ func WithRequest(db *gorm.DB, ctx zen.Context) *gorm.DB {
 // Use these in service / DAO layers that receive a plain context.Context
 // (background jobs, gRPC handlers, CLI commands, etc.)
 
-// DBCtx returns the default *gorm.DB with ctx attached.
+// DBCtx returns the default *gorm.DB from context with ctx attached.
+// It extracts the DB injected by InjectMiddleware — no *App reference needed.
+// This is the recommended way to access the database in service and DAO layers.
+//
+//	func NewOrdersDao(ctx context.Context) *OrdersDao {
+//	    return &OrdersDao{db: zdb.DBCtx(ctx)}
+//	}
+func DBCtx(ctx context.Context) *gorm.DB {
+	db, ok := FromContext(ctx)
+	if !ok {
+		panic("zdb: no database in context; ensure zdb.InjectMiddleware is registered before this handler")
+	}
+	return db.WithContext(ctx)
+}
+
+// ConnCtx returns a named *gorm.DB from context with ctx attached.
+// Use when you need a specific connection (e.g. a read replica or secondary DB).
+//
+//	db := zdb.ConnCtx(ctx, "replica")
+func ConnCtx(ctx context.Context, name string) *gorm.DB {
+	db, ok := NamedFromContext(ctx, name)
+	if !ok {
+		panic("zdb: named database " + name + " not in context; ensure zdb.InjectMiddleware is registered")
+	}
+	return db.WithContext(ctx)
+}
+
+// DBFrom returns the default *gorm.DB with ctx attached.
 // Falls back to the app-registered default DB when no DB is found in ctx.
-func DBCtx(app *zen.App, ctx context.Context) *gorm.DB {
+// Prefer DBCtx for handler/service code; use DBFrom only when *App is available
+// but injection middleware is not (e.g. CLI commands, one-off scripts).
+func DBFrom(app *zen.App, ctx context.Context) *gorm.DB {
 	if db, ok := FromContext(ctx); ok {
 		return db.WithContext(ctx)
 	}
 	return MustResolve(app).WithContext(ctx)
 }
 
-// NamedCtx returns a named *gorm.DB with ctx attached.
-func NamedCtx(app *zen.App, ctx context.Context, name string) *gorm.DB {
+// ConnFrom returns a named *gorm.DB with ctx attached, falling back to app.
+func ConnFrom(app *zen.App, ctx context.Context, name string) *gorm.DB {
 	if db, ok := NamedFromContext(ctx, name); ok {
 		return db.WithContext(ctx)
 	}

@@ -534,7 +534,11 @@ func NewEngineFromConfig(logger zen.Logger, cfg zen.Config) *GinEngine {
 
 // NewEngineFromConfigWithOptions is like NewEngineFromConfig but accepts explicit server timeouts.
 func NewEngineFromConfigWithOptions(logger zen.Logger, cfg zen.Config, options ServerOptions) *GinEngine {
-	gin.SetMode(gin.ReleaseMode)
+	if cfg != nil && cfg.GetBool("system.debug") {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	g := gin.New()
 	if logger == nil {
 		logger = discardLogger{}

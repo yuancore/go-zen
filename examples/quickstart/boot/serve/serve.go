@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yuancore/go-zen/adapter/cache/zredis"
 	"github.com/yuancore/go-zen/adapter/db/zdb"
 	"github.com/yuancore/go-zen/adapter/http/zgin"
 	"github.com/yuancore/go-zen/adapter/logger/zlog"
@@ -77,10 +78,16 @@ func newApp(cfg zen.Config) (*zen.App, error) {
 	// zdb.New() auto-reads [[connections]] from config and opens all DB connections.
 	app.Use(zdb.New())
 
-	// Pre-inject all DB connections into each request's context so service/DAO
-	// code can call zdb.DBCtx(app, ctx) or zdb.FromContext(ctx) without *App.
+	// zredis.New() auto-reads [[redis]] from config and opens all Redis connections.
+	// Retrieve the default client with: zredis.MustResolve(app)
+	// Retrieve a named client with:     zredis.MustResolveNamed(app, "session")
+	// Replace with a custom backend:    app.RegisterCache(myCache)
+	app.Use(zredis.New())
+
+	// Pre-inject all DB and Redis connections into each request's context so
+	// service/DAO code can call zdb.DBCtx(ctx) / zredis.CacheCtx(ctx) without *App.
 	app.OnStart(func() error {
-		app.Middleware(zdb.InjectMiddleware(app))
+		app.Middleware(zdb.InjectMiddleware(app), zredis.InjectMiddleware(app))
 		return router.Setup(app)
 	})
 

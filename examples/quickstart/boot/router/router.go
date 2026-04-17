@@ -18,9 +18,9 @@ func Setup(app *zen.App) error {
 	// Global middleware
 	app.Middleware()
 
-	// Controllers — db is resolved lazily per-request via gormadapter.DB(app, ctx)
+	// Controllers — no *App needed; DB/Cache are resolved per-request via context
 	sysCtrl := api.NewSystemController()
-	ordersCtrl := api.NewOrdersController(app)
+	ordersCtrl := api.NewOrdersController()
 
 	// Health / liveness
 	app.GET(routes.Ping, sysCtrl.Ping)

@@ -5,7 +5,7 @@ listen = "2048"
 #项目名称
 app_name = "gozen"
 #是否开发调试模式
-debug = true
+debug = false
 
 
 #接口请求日志

@@ -205,6 +205,24 @@ func (a *App) Engine() Engine { return a.engine }
 // Name returns the application name.
 func (a *App) AppName() string { return a.name }
 
+// RegisterCache registers a custom Cache implementation as the default cache.
+// Call this to replace the built-in go-redis adapter with your own backend
+// (e.g. Memcached, in-memory, mock):
+//
+//	app.RegisterCache(myMemcachedCache)
+//
+// RegisterCache is equivalent to app.Provide(zen.DefaultCacheServiceName, cache)
+// but is self-documenting and type-safe.
+func (a *App) RegisterCache(cache Cache) {
+	a.ctr.Provide(DefaultCacheServiceName, cache)
+}
+
+// Cache returns the default cache registered in the container.
+// Returns (nil, false) if no cache has been registered yet.
+func (a *App) Cache() (Cache, bool) {
+	return ResolveAs[Cache](a, DefaultCacheServiceName)
+}
+
 // ---------- Lifecycle Hooks ----------
 
 // OnStart registers a hook that runs after all components start.
@@ -256,16 +274,25 @@ func (a *App) Run(addr string) error {
 		a.logger.Info("zen: components resolved", "order", componentNames(a.order))
 	}
 
-	// Init phase — parallel within each level
+	// Init phase — parallel within each level.
+	// On failure, stop any components that were already initialised so
+	// connections/goroutines are not leaked (all Stop() impls guard with nil
+	// checks, so calling them on partially-initialised components is safe).
 	for _, level := range levels {
 		if err := a.initLevel(level); err != nil {
+			stopCtx, stopCancel := context.WithTimeout(context.Background(), a.stopTimeout)
+			_ = a.stopComponents(stopCtx, a.order)
+			stopCancel()
 			return err
 		}
 	}
 
-	// Start phase — parallel within each level
+	// Start phase — parallel within each level.
 	for _, level := range levels {
 		if err := a.startLevel(level); err != nil {
+			stopCtx, stopCancel := context.WithTimeout(context.Background(), a.stopTimeout)
+			_ = a.stopComponents(stopCtx, a.order)
+			stopCancel()
 			return err
 		}
 	}
@@ -304,6 +331,23 @@ func (a *App) Run(addr string) error {
 // Stop triggers a graceful shutdown programmatically.
 func (a *App) Stop() error {
 	return a.shutdown()
+}
+
+// stopComponents stops components in reverse registration order.
+// It is safe to call even when components are partially initialised —
+// every Stop() implementation guards access with a nil-check on its manager.
+func (a *App) stopComponents(ctx context.Context, components []Component) error {
+	var first error
+	for i := len(components) - 1; i >= 0; i-- {
+		c := components[i]
+		if err := c.Stop(ctx); err != nil {
+			a.logger.Error("zen: component stop error", "name", c.Name(), "err", err)
+			if first == nil {
+				first = err
+			}
+		}
+	}
+	return first
 }
 
 func (a *App) shutdown() error {

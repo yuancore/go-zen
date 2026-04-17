@@ -1,22 +1,26 @@
 package service
 
 import (
+	"context"
+
 	"github.com/yuancore/go-zen/examples/quickstart/app/dao"
 	"github.com/yuancore/go-zen/examples/quickstart/app/entity/models"
 	"github.com/yuancore/go-zen/examples/quickstart/app/entity/request"
-	"gorm.io/gorm"
 )
 
 // OrdersService handles business logic for the orders resource.
-// The *gorm.DB passed in should already carry the request context.
+// It accepts a context.Context so it can be called from HTTP handlers,
+// background jobs, CLI commands, or tests — all without holding *zen.App.
 type OrdersService struct {
 	dao *dao.OrdersDao
 }
 
-// NewOrdersService creates an OrdersService bound to the given database handle.
-func NewOrdersService(db *gorm.DB) *OrdersService {
+// NewOrdersService creates an OrdersService.
+// ctx is the request/operation context — DB and Redis are resolved from it
+// via the middleware injected at app startup (zdb.InjectMiddleware, zredis.InjectMiddleware).
+func NewOrdersService(ctx context.Context) *OrdersService {
 	return &OrdersService{
-		dao: dao.NewOrdersDao(db),
+		dao: dao.NewOrdersDao(ctx),
 	}
 }
 

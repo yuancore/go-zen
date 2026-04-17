@@ -5,7 +5,7 @@ listen = "2048"
 #项目名称
 app_name = "gozen"
 #是否开发调试模式
-debug = false
+debug = true
 
 
 #接口请求日志
@@ -82,10 +82,20 @@ conn_max_idle_time = 1
 #日志等级,1=静默;2=错误;3=警告;4=信息
 level = 4
 
-#Redis配置
+#Redis配置 — 支持多实例，启动时自动 Ping，连接失败则退出
+#第一个实例自动作为默认实例（通过 zredis.Cache(app) 获取）
+#其他实例通过名称获取（通过 zredis.CacheNamed(app, "session") 获取）
 [[redis]]
 name = "redis"
 address = "127.0.0.1:6379"
 password = "pi3.1415926"
 db = 0
+#pool_size = 10      # 连接池大小，默认 10
+#ping_timeout = 5    # 启动连接检测超时(秒)，默认 5；设为 -1 禁用
+
+#[[redis]]
+#name = "session"
+#address = "127.0.0.1:6379"
+#password = "pi3.1415926"
+#db = 1
 

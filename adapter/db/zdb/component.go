@@ -247,10 +247,11 @@ func openConnection(conn ConnectionConfig, logger zen.Logger) (*gorm.DB, error) 
 
 	if conn.effectivePingTimeout > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), conn.effectivePingTimeout)
-		defer cancel()
-		if err := sqlDB.PingContext(ctx); err != nil {
+		pingErr := sqlDB.PingContext(ctx)
+		cancel()
+		if pingErr != nil {
 			_ = sqlDB.Close()
-			return nil, err
+			return nil, fmt.Errorf("startup ping failed: %w — check host/port/username/password in config", pingErr)
 		}
 	}
 

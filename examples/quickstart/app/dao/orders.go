@@ -1,20 +1,23 @@
 package dao
 
 import (
+	"context"
+
+	"github.com/yuancore/go-zen/adapter/db/zdb"
 	"github.com/yuancore/go-zen/examples/quickstart/app/entity/models"
 	"github.com/yuancore/zentool/page"
 	"gorm.io/gorm"
 )
 
 // OrdersDao encapsulates all database operations for the orders table.
-// The *gorm.DB passed in should already have the request context attached
-// (e.g. via gormadapter.DB(app, ctx)).
 type OrdersDao struct {
 	db *gorm.DB
 }
 
-func NewOrdersDao(db *gorm.DB) *OrdersDao {
-	return &OrdersDao{db: db}
+// NewOrdersDao creates a DAO whose *gorm.DB is resolved directly from ctx.
+// No *zen.App or *gorm.DB parameter needed — the DB is injected by middleware.
+func NewOrdersDao(ctx context.Context) *OrdersDao {
+	return &OrdersDao{db: zdb.DBCtx(ctx)}
 }
 
 // Create inserts a new order and returns its generated primary key.
