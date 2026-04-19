@@ -47,10 +47,9 @@ func (d *OrdersDao) Update(order models.Orders) error {
 }
 
 // GetList returns all orders (no pagination).
-func (d *OrdersDao) GetList() ([]models.Orders, error) {
-	var list []models.Orders
-	err := d.db.Model(&models.Orders{}).Find(&list).Error
-	return list, err
+func (d *OrdersDao) GetList() (list []models.Orders, err error) {
+	err = d.db.Model(&models.Orders{}).Find(&list).Error
+	return
 }
 
 // GetPage returns a paginated list and the total row count.
@@ -75,8 +74,7 @@ func (d *OrdersDao) GetPage(p page.PageParam) (list []models.Orders, total int64
 }
 
 // GetByID returns the order with the given ID, or a zero-value struct if not found.
-func (d *OrdersDao) GetByID(id int) (models.Orders, error) {
-	var row models.Orders
-	err := d.db.Where("id = ?", id).First(&row).Error
-	return row, err
+func (d *OrdersDao) GetByID(id int) (row models.Orders, err error) {
+	err = d.db.Where("id = ?", id).First(&row).Error
+	return
 }

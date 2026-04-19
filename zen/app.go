@@ -12,6 +12,15 @@ import (
 	"time"
 )
 
+// fatal logs a message at Fatal level and unconditionally calls os.Exit(1).
+// This must be used instead of a.logger.Fatal for startup errors, because
+// some logger implementations (e.g. a nop logger with switch=false) do not
+// call os.Exit themselves.
+func (a *App) fatal(msg string, kv ...any) {
+	a.logger.Fatal(msg, kv...)
+	os.Exit(1)
+}
+
 const defaultBanner = `
   ______  _____ _   _ 
  |___  / | ____| \ | |
@@ -283,8 +292,8 @@ func (a *App) Run(addr string) error {
 			stopCtx, stopCancel := context.WithTimeout(context.Background(), a.stopTimeout)
 			_ = a.stopComponents(stopCtx, a.order)
 			stopCancel()
-			a.logger.Fatal("zen: startup failed — check your config and service availability", "err", err)
-			return err // unreachable: Fatal calls os.Exit(1)
+			a.fatal("zen: startup failed — check your config and service availability", "err", err)
+			return err // unreachable
 		}
 	}
 
@@ -294,8 +303,8 @@ func (a *App) Run(addr string) error {
 			stopCtx, stopCancel := context.WithTimeout(context.Background(), a.stopTimeout)
 			_ = a.stopComponents(stopCtx, a.order)
 			stopCancel()
-			a.logger.Fatal("zen: startup failed", "err", err)
-			return err // unreachable: Fatal calls os.Exit(1)
+			a.fatal("zen: startup failed", "err", err)
+			return err // unreachable
 		}
 	}
 

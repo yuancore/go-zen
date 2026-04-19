@@ -9,16 +9,17 @@ import (
 	"github.com/yuancore/go-zen/zen"
 )
 
+// Option 用于自定义 Redis 组件行为。
 // Option customizes the Redis component.
 type Option func(*Component)
 
-// Component manages Redis connections and injects them into the zen container.
+// Component 管理 Redis 连接并将其注入 zen 容器。
 //
-// Usage:
+// 使用示例 / Usage:
 //
-//	app.Use(zredis.New())                   // reads [[redis]] from config
+//	app.Use(zredis.New())                   // 从配置读取 [[redis]] / reads [[redis]] from config
 //	app.Use(zredis.New(
-//	    zredis.WithConfigKey("my_redis"),   // custom config key
+//	    zredis.WithConfigKey("my_redis"),   // 自定义配置键 / custom config key
 //	))
 type Component struct {
 	zen.BaseComponent
@@ -26,12 +27,14 @@ type Component struct {
 	configKey          string
 	serviceName        string
 	managerServiceName string
-	instances          []InstanceConfig // explicit override; nil = read from config
+	instances          []InstanceConfig // 显式覆盖；nil 表示从配置读取 / explicit override; nil = read from config
 
 	manager   *Manager
 	closeOnce sync.Once
 }
 
+// New 创建 Redis 组件，支持可选配置项。
+// 未传入任何选项时，自动读取 [[redis]] 配置节。
 // New creates a Redis component with optional customizations.
 // When no options are given it reads the [[redis]] config section.
 func New(opts ...Option) *Component {
@@ -49,6 +52,7 @@ func New(opts ...Option) *Component {
 	return c
 }
 
+// WithConfigKey 覆盖配置节键名（默认："redis"）。
 // WithConfigKey overrides the config section key (default: "redis").
 func WithConfigKey(key string) Option {
 	return func(c *Component) {
@@ -58,8 +62,7 @@ func WithConfigKey(key string) Option {
 	}
 }
 
-// WithInstances injects explicit instance configurations.
-// Useful for tests or fully code-driven setups.
+// WithInstances 注入显式实例配置，适用于测试或完全代码驱动的场景。
 //
 //	app.Use(zredis.New(
 //	    zredis.WithInstances(zredis.InstanceConfig{
@@ -67,12 +70,16 @@ func WithConfigKey(key string) Option {
 //	        Address: "127.0.0.1:6379",
 //	    }),
 //	))
+//
+// WithInstances injects explicit instance configurations.
+// Useful for tests or fully code-driven setups.
 func WithInstances(instances ...InstanceConfig) Option {
 	return func(c *Component) {
 		c.instances = append(c.instances, instances...)
 	}
 }
 
+// WithServiceName 覆盖默认 zen.Cache 的容器键（默认："cache"）。
 // WithServiceName overrides the container key for the default zen.Cache (default: "cache").
 func WithServiceName(name string) Option {
 	return func(c *Component) {
@@ -82,6 +89,7 @@ func WithServiceName(name string) Option {
 	}
 }
 
+// WithManagerServiceName 覆盖 *Manager 的容器键（默认："redis_manager"）。
 // WithManagerServiceName overrides the container key for the *Manager (default: "redis_manager").
 func WithManagerServiceName(name string) Option {
 	return func(c *Component) {
@@ -93,7 +101,16 @@ func WithManagerServiceName(name string) Option {
 
 // ---------- Component lifecycle ----------
 
-// Init opens Redis connections and registers them in the app container.
+// Init 打开 Redis 连接并将其注册到应用容器，同时自动注册 context 注入中间件。
+// 配置错误或 Ping 失败均会返回 error，应用启动时 fail-fast 退出。
+// 注册的服务键：
+//   - "<serviceName>"              → 默认 zen.Cache  （如 "cache"）
+//   - "<serviceName>.<name>"       → 具名 zen.Cache  （如 "cache.redis"）
+//   - "<managerServiceName>"       → *Manager        （如 "redis_manager"）
+//
+// Init opens Redis connections, registers them in the app container, and
+// auto-registers the context-injection middleware via an OnStart hook.
+// Config errors or a failed ping cause Init to return an error (fail-fast).
 // Registered services:
 //   - "<serviceName>"              → default zen.Cache  (e.g. "cache")
 //   - "<serviceName>.<name>"       → named zen.Cache    (e.g. "cache.redis")
@@ -115,12 +132,18 @@ func (c *Component) Init(app *zen.App) error {
 
 	mgr := newManager(defaultName)
 	for _, inst := range instances {
-		name := strings.TrimSpace(inst.Name)
-		if name == "" {
-			return fmt.Errorf("redis: every instance must have a non-empty name")
+		// 校验必填字段：配置字段名写错时 mapstructure 会静默赋零值，此处提前拦截。
+		// Validate required fields early; misspelled config keys cause silent zero values.
+		if err := inst.validate(); err != nil {
+			_ = mgr.Close()
+			return err
 		}
-		client := newClient(inst)
 
+		client := newClient(inst)
+		name := inst.Name // validate() already ensures non-empty / validate() 已保证非空
+
+		// 启动连通性检查 — 与 GORM ping 行为保持一致。
+		// 快速失败，避免应用在无缓存状态下静默运行。
 		// Startup connectivity check — mirrors the GORM ping behaviour.
 		// Fails fast so the process exits instead of silently running without cache.
 		if timeout := inst.effectivePingTimeout(); timeout > 0 {
@@ -128,6 +151,7 @@ func (c *Component) Init(app *zen.App) error {
 			pingErr := client.Ping(pingCtx)
 			cancel()
 			if pingErr != nil {
+				// 该客户端尚未加入 mgr，需手动关闭。
 				// Close this client before returning — it is not yet in mgr so mgr.Close() won't reach it.
 				_ = client.Close()
 				_ = mgr.Close()
@@ -144,14 +168,23 @@ func (c *Component) Init(app *zen.App) error {
 	}
 	c.manager = mgr
 
+	// 向容器注册 manager 和各客户端实例。
 	// Register manager and individual clients in the container.
 	app.Provide(c.managerServiceName, mgr)
 	for _, name := range mgr.Names() {
 		cl, _ := mgr.Get(name)
 		app.Provide(namedService(c.serviceName, name), cl)
 	}
+	// 将默认实例注册到不带名称的服务键下。
 	// Register the default instance under the plain service name.
 	app.Provide(c.serviceName, mgr.MustDefault())
+
+	// 自动注册 context 注入中间件，无需调用方手动添加。
+	// Auto-register the context-injection middleware so callers need not wire it manually.
+	app.OnStart(func() error {
+		app.Middleware(InjectMiddleware(app))
+		return nil
+	})
 
 	logger.Info("redis initialized",
 		"default", mgr.DefaultName(),
@@ -160,9 +193,11 @@ func (c *Component) Init(app *zen.App) error {
 	return nil
 }
 
+// Start 是空操作；连接在 Init 时已就绪。
 // Start is a no-op; connections are ready after Init.
 func (c *Component) Start() error { return nil }
 
+// Stop 关闭所有 Redis 连接。
 // Stop closes all Redis connections.
 func (c *Component) Stop(_ context.Context) error {
 	var err error
@@ -189,11 +224,13 @@ func (c *Component) resolveInstances(cfg zen.Config) ([]InstanceConfig, string, 
 
 // ---------- Package-level resolution helpers ----------
 
+// Resolve 返回该组件注册的默认 zen.Cache。
 // Resolve returns the default zen.Cache registered by this component.
 func Resolve(app *zen.App) (zen.Cache, bool) {
 	return zen.ResolveAs[zen.Cache](app, DefaultServiceName)
 }
 
+// MustResolve 返回默认 zen.Cache，未注册时 panic。
 // MustResolve returns the default zen.Cache or panics.
 func MustResolve(app *zen.App) zen.Cache {
 	c, ok := Resolve(app)
@@ -203,11 +240,13 @@ func MustResolve(app *zen.App) zen.Cache {
 	return c
 }
 
+// ResolveNamed 返回该组件注册的具名 zen.Cache。
 // ResolveNamed returns the named zen.Cache registered by this component.
 func ResolveNamed(app *zen.App, name string) (zen.Cache, bool) {
 	return zen.ResolveAs[zen.Cache](app, NamedService(name))
 }
 
+// MustResolveNamed 返回具名 zen.Cache，未注册时 panic。
 // MustResolveNamed returns the named zen.Cache or panics.
 func MustResolveNamed(app *zen.App, name string) zen.Cache {
 	c, ok := ResolveNamed(app, name)
@@ -217,13 +256,14 @@ func MustResolveNamed(app *zen.App, name string) zen.Cache {
 	return c
 }
 
+// ResolveManager 返回该组件注册的 *Manager。
 // ResolveManager returns the *Manager registered by this component.
 func ResolveManager(app *zen.App) (*Manager, bool) {
 	return zen.ResolveAs[*Manager](app, DefaultManagerServiceName)
 }
 
-// NamedService returns the container key for a named Redis instance
-// (e.g. "cache.session").
+// NamedService 返回具名 Redis 实例的容器键（如 "cache.session"）。
+// NamedService returns the container key for a named Redis instance (e.g. "cache.session").
 func NamedService(name string) string {
 	return namedService(DefaultServiceName, name)
 }

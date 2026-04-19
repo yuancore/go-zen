@@ -10,20 +10,27 @@ import (
 	"github.com/yuancore/go-zen/zen"
 )
 
+// RedisCache 包装 *redis.Client 并实现 zen.Cache 接口。
 // RedisCache wraps *redis.Client and implements zen.Cache.
 type RedisCache struct {
 	rdb *redis.Client
 }
 
+// 编译期接口检查。
 // compile-time interface check.
 var _ zen.Cache = (*RedisCache)(nil)
 
+// newClient 根据 InstanceConfig 创建 Redis 客户端。
+// MinIdleConns 在高并发场景下可保持连接预热，降低冷连接建立延迟。
+// newClient creates a Redis client from InstanceConfig.
+// MinIdleConns keeps connections warm to reduce cold-start latency under high concurrency.
 func newClient(cfg InstanceConfig) *RedisCache {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:         cfg.effectiveAddress(),
 		Password:     cfg.Password,
 		DB:           cfg.DB,
 		PoolSize:     cfg.effectivePoolSize(),
+		MinIdleConns: cfg.effectiveMinIdleConns(),
 		MaxRetries:   cfg.effectiveMaxRetries(),
 		DialTimeout:  cfg.effectiveDialTimeout(),
 		ReadTimeout:  cfg.effectiveReadTimeout(),
@@ -32,6 +39,7 @@ func newClient(cfg InstanceConfig) *RedisCache {
 	return &RedisCache{rdb: rdb}
 }
 
+// mapErr 将 redis.Nil 转换为 ErrNil，便于调用方统一使用 errors.Is。
 // mapErr translates redis.Nil to ErrNil so callers can use errors.Is uniformly.
 func mapErr(err error) error {
 	if errors.Is(err, redis.Nil) {
@@ -42,11 +50,13 @@ func mapErr(err error) error {
 
 // ---------- Lifecycle ----------
 
+// Ping 检测 Redis 连接是否正常。
 // Ping checks the Redis connection.
 func (c *RedisCache) Ping(ctx context.Context) error {
 	return c.rdb.Ping(ctx).Err()
 }
 
+// Close 关闭底层 Redis 客户端连接。
 // Close closes the underlying Redis client.
 func (c *RedisCache) Close() error {
 	return c.rdb.Close()

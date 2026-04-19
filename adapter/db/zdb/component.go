@@ -18,15 +18,18 @@ import (
 	"gorm.io/gorm"
 )
 
+// ConfigProvider 是该组件所需的最小配置接口。
 // ConfigProvider is the minimal config surface required by this component.
 type ConfigProvider interface {
 	IsSet(key string) bool
 	Unmarshal(key string, v any) error
 }
 
+// Option 用于自定义 GORM 组件行为。
 // Option customizes the GORM component.
 type Option func(*Component)
 
+// Component 管理 GORM 连接并将其注入 zen 容器。
 // Component manages GORM connections and injects them into the zen container.
 type Component struct {
 	zen.BaseComponent
@@ -41,6 +44,7 @@ type Component struct {
 	closeOnce sync.Once
 }
 
+// New 创建面向生产的 GORM 组件。
 // New creates a production-oriented GORM component.
 func New(opts ...Option) *Component {
 	c := &Component{
@@ -57,6 +61,7 @@ func New(opts ...Option) *Component {
 	return c
 }
 
+// WithConfigKey 覆盖加载配置所用的键名。
 // WithConfigKey overrides the config key used to load settings.
 func WithConfigKey(key string) Option {
 	return func(c *Component) {
@@ -64,6 +69,7 @@ func WithConfigKey(key string) Option {
 	}
 }
 
+// WithSettings 注入显式配置，适用于测试或完全代码驱动的场景。
 // WithSettings injects explicit settings, useful for tests or fully code-driven apps.
 func WithSettings(settings Settings) Option {
 	return func(c *Component) {
@@ -73,6 +79,7 @@ func WithSettings(settings Settings) Option {
 	}
 }
 
+// WithServiceName 覆盖默认 *gorm.DB 的容器键。
 // WithServiceName overrides the service name used for the default *gorm.DB.
 func WithServiceName(name string) Option {
 	return func(c *Component) {
@@ -82,6 +89,7 @@ func WithServiceName(name string) Option {
 	}
 }
 
+// WithManagerServiceName 覆盖 Manager 注册表的容器键。
 // WithManagerServiceName overrides the service name used for the manager registry.
 func WithManagerServiceName(name string) Option {
 	return func(c *Component) {
@@ -91,7 +99,9 @@ func WithManagerServiceName(name string) Option {
 	}
 }
 
-// Init opens connections and injects them into the app container.
+// Init 打开数据库连接，将其注入应用容器，并自动注册 context 注入中间件。
+// Init opens connections, injects them into the app container, and
+// auto-registers the context-injection middleware via an OnStart hook.
 func (c *Component) Init(app *zen.App) error {
 	c.logger = app.Logger().With("component", c.Name())
 
@@ -117,13 +127,22 @@ func (c *Component) Init(app *zen.App) error {
 	}
 	app.Provide(c.serviceName, manager.MustDefault())
 
+	// 自动注册 context 注入中间件，无需调用方手动添加。
+	// Auto-register the context-injection middleware so callers need not wire it manually.
+	app.OnStart(func() error {
+		app.Middleware(InjectMiddleware(app))
+		return nil
+	})
+
 	c.logger.Info("gorm initialized", "default", manager.DefaultName(), "connections", manager.Names())
 	return nil
 }
 
+// Start 是空操作；连接在 Init 时已就绪。
 // Start is a no-op because GORM connections are ready after Init.
 func (c *Component) Start() error { return nil }
 
+// Stop 关闭所有 SQL 数据库连接。
 // Stop closes all opened SQL connections.
 func (c *Component) Stop(_ context.Context) error {
 	var err error
@@ -140,11 +159,13 @@ func (c *Component) Stop(_ context.Context) error {
 	return err
 }
 
+// Resolve 返回默认 *gorm.DB。
 // Resolve returns the default *gorm.DB registered under the default service key.
 func Resolve(app *zen.App) (*gorm.DB, bool) {
 	return zen.ResolveAs[*gorm.DB](app, DefaultServiceName)
 }
 
+// MustResolve 返回默认 *gorm.DB，未注册时 panic。
 // MustResolve returns the default *gorm.DB and panics if missing.
 func MustResolve(app *zen.App) *gorm.DB {
 	db, ok := Resolve(app)
@@ -154,11 +175,13 @@ func MustResolve(app *zen.App) *gorm.DB {
 	return db
 }
 
+// ResolveNamed 返回具名 *gorm.DB。
 // ResolveNamed returns a named *gorm.DB registered by this component.
 func ResolveNamed(app *zen.App, name string) (*gorm.DB, bool) {
 	return zen.ResolveAs[*gorm.DB](app, NamedService(name))
 }
 
+// MustResolveNamed 返回具名 *gorm.DB，未注册时 panic。
 // MustResolveNamed returns a named *gorm.DB or panics.
 func MustResolveNamed(app *zen.App, name string) *gorm.DB {
 	db, ok := ResolveNamed(app, name)
@@ -168,11 +191,13 @@ func MustResolveNamed(app *zen.App, name string) *gorm.DB {
 	return db
 }
 
+// ResolveManager 返回该组件注册的连接管理器。
 // ResolveManager returns the connection manager registered by this component.
 func ResolveManager(app *zen.App) (*Manager, bool) {
 	return zen.ResolveAs[*Manager](app, DefaultManagerServiceName)
 }
 
+// MustResolveManager 返回连接管理器，未注册时 panic。
 // MustResolveManager returns the connection manager or panics.
 func MustResolveManager(app *zen.App) *Manager {
 	manager, ok := ResolveManager(app)
@@ -182,6 +207,7 @@ func MustResolveManager(app *zen.App) *Manager {
 	return manager
 }
 
+// NamedService 返回具名数据库的容器键（如 "db.orders"）。
 // NamedService returns the container key used for a named database.
 func NamedService(name string) string {
 	return namedService(DefaultServiceName, name)

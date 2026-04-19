@@ -13,26 +13,18 @@ import (
 	"github.com/yuancore/go-zen/zen"
 )
 
-// Run is the CLI entrypoint.
-// Flags:
-//
-//	-config-dir ./config       directory containing config.toml + env overlays (default)
-//	-config     ./config/x.toml  [legacy] explicit single-file path (overrides -config-dir)
+// Run 是 CLI 入口点，解析 -config 标志后启动应用。
+// Run is the CLI entrypoint. It parses the -config flag and starts the application.
 func Run() error {
-	configDir := flag.String("config-dir", "./config", "directory containing config.toml and env overlays (e.g. ./config)")
-	legacyPath := flag.String("config", "", "[legacy] explicit config file path (overrides -config-dir)")
+	configDir := flag.String("config", "./config/config_dev.toml", "Configuration file path")
 	flag.Parse()
-
-	if *legacyPath != "" {
-		return StartFromFile(*legacyPath)
-	}
 	return Start(*configDir)
 }
 
-// Start loads env-based config from dir and starts the application.
-// APP_ENV selects the overlay: config.toml + config_{APP_ENV}.toml.
+// Start 从指定路径加载配置并启动应用。
+// Start loads config from the given path and starts the application.
 func Start(configDir string) error {
-	cfg, err := loadEnvConfig(configDir)
+	cfg, err := loadConfig(configDir)
 	if err != nil {
 		return err
 	}
@@ -41,28 +33,6 @@ func Start(configDir string) error {
 		return err
 	}
 	return app.Run(listenAddr(cfg))
-}
-
-// StartFromFile loads a single explicit config file (legacy / CI usage).
-func StartFromFile(configPath string) error {
-	cfg, err := loadConfig(configPath)
-	if err != nil {
-		return err
-	}
-	app, err := newApp(cfg)
-	if err != nil {
-		return err
-	}
-	return app.Run(listenAddr(cfg))
-}
-
-// NewApp constructs the application without starting it (used by tests).
-func NewApp(configPath string) (*zen.App, error) {
-	cfg, err := loadConfig(configPath)
-	if err != nil {
-		return nil, err
-	}
-	return newApp(cfg)
 }
 
 // newApp is the shared constructor used by all entry points.
@@ -70,30 +40,33 @@ func newApp(cfg zen.Config) (*zen.App, error) {
 	app := zen.New(
 		zen.WithName(name(cfg)),
 		zen.WithConfig(cfg),
-		zlog.Factory(),              // builds ZapLogger from [log] config section
-		zgin.FactoryFromConfig(cfg), // builds GinEngine; access log driven by [http_log]
+		zlog.Factory(),              // 从 [log] 配置节构建 ZapLogger / builds ZapLogger from [log] config section
+		zgin.FactoryFromConfig(cfg), // 构建 GinEngine，访问日志由 [http_log] 驱动 / builds GinEngine; access log driven by [http_log]
 		zen.WithStopTimeout(10*time.Second),
 	)
 
-	// zdb.New() auto-reads [[connections]] from config and opens all DB connections.
+	// zdb.New() 自动读取 [[connections]] 并打开所有数据库连接，同时注册 context 注入中间件。
+	// zdb.New() auto-reads [[connections]], opens all DB connections, and registers the inject middleware.
 	app.Use(zdb.New())
 
-	// zredis.New() auto-reads [[redis]] from config and opens all Redis connections.
-	// Retrieve the default client with: zredis.MustResolve(app)
-	// Retrieve a named client with:     zredis.MustResolveNamed(app, "session")
-	// Replace with a custom backend:    app.RegisterCache(myCache)
+	// zredis.New() 自动读取 [[redis]] 并打开所有 Redis 连接，同时注册 context 注入中间件。
+	// 默认客户端：zredis.MustResolve(app)；具名客户端：zredis.MustResolveNamed(app, "session")
+	// zredis.New() auto-reads [[redis]], opens all Redis connections, and registers the inject middleware.
+	// Default client: zredis.MustResolve(app)  Named client: zredis.MustResolveNamed(app, "session")
 	app.Use(zredis.New())
 
-	// Pre-inject all DB and Redis connections into each request's context so
-	// service/DAO code can call zdb.DBCtx(ctx) / zredis.CacheCtx(ctx) without *App.
+	// 所有 DB 和 Redis 的 context 注入中间件已由各组件自动注册，此处仅需设置路由。
+	// DB and Redis context-injection middlewares are auto-registered by each component above.
+	// Only route setup is needed here.
 	app.OnStart(func() error {
-		app.Middleware(zdb.InjectMiddleware(app), zredis.InjectMiddleware(app))
 		return router.Setup(app)
 	})
 
 	return app, nil
 }
 
+// listenAddr 从配置中读取监听地址，确保带 ":" 前缀。
+// listenAddr reads the listen address from config, ensuring it has a ":" prefix.
 func listenAddr(cfg zen.Config) string {
 	addr := strings.TrimSpace(cfg.GetString("system.listen"))
 	if addr == "" {
@@ -105,6 +78,8 @@ func listenAddr(cfg zen.Config) string {
 	return addr
 }
 
+// name 从配置中读取应用名称，默认为 "go-zen-quickstart"。
+// name reads the application name from config, defaulting to "go-zen-quickstart".
 func name(cfg zen.Config) string {
 	if name := strings.TrimSpace(cfg.GetString("system.app_name")); name != "" {
 		return name

@@ -58,7 +58,7 @@ name = "mysql"
 type = "mysql"
 #服务器地址
 #服务器地址
-hostname = "127.0.0.12"
+hostname = "127.0.0.1"
 #服务器端口
 port = 3306
 #数据库用户名
@@ -88,10 +88,10 @@ level = 4
 [[redis]]
 name = "redis"
 address = "127.0.0.1:6379"
-password = "pi3.1415926"
+password = "pi3.1415926222"
 db = 0
-#pool_size = 10      # 连接池大小，默认 10
-#ping_timeout = 5    # 启动连接检测超时(秒)，默认 5；设为 -1 禁用
+pool_size = 10      # 连接池大小，默认 10
+ping_timeout = 5    # 启动连接检测超时(秒)，默认 5；设为 -1 禁用
 
 #[[redis]]
 #name = "session"

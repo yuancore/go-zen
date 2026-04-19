@@ -306,6 +306,7 @@ func NewEngine(logger zen.Logger) *GinEngine {
 func NewEngineWithOptions(logger zen.Logger, options ServerOptions) *GinEngine {
 	gin.SetMode(gin.ReleaseMode)
 	g := gin.New()
+	g.ContextWithFallback = true // allow c.Value() to fall back to c.Request.Context() for struct-typed keys
 	if logger == nil {
 		logger = discardLogger{}
 	}
@@ -540,6 +541,7 @@ func NewEngineFromConfigWithOptions(logger zen.Logger, cfg zen.Config, options S
 		gin.SetMode(gin.ReleaseMode)
 	}
 	g := gin.New()
+	g.ContextWithFallback = true // allow c.Value() to fall back to c.Request.Context() for struct-typed keys
 	if logger == nil {
 		logger = discardLogger{}
 	}
